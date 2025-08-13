@@ -86,7 +86,22 @@ const translations = {
     
     // Common
     no_location_data: 'Sem dados de localização',
-    select_device_details: 'Selecione um dispositivo para ver os detalhes'
+    select_device_details: 'Selecione um dispositivo para ver os detalhes',
+    
+    // Performance
+    performance: 'Performance',
+    performance_monitor: 'Monitor de Performance',
+    loading_metrics: 'Métricas de Carregamento',
+    auto_optimization: 'Otimização Automática',
+    performance_settings: 'Configure o monitoramento e otimização de performance',
+    
+    // Dashboard
+    live_camera: 'Câmera ao Vivo',
+    view_mode: 'Modo de Visualização',
+    grid_view: 'Visualização em Grade',
+    list_view: 'Visualização em Lista',
+    no_vehicle_selected: 'Nenhum Veículo Selecionado',
+    click_to_select_vehicle: 'Clique em um veículo na lista para ver seus detalhes'
   },
   'en-US': {
     // Dashboard
@@ -163,7 +178,22 @@ const translations = {
     
     // Common
     no_location_data: 'No location data',
-    select_device_details: 'Select a device to see details'
+    select_device_details: 'Select a device to see details',
+    
+    // Performance
+    performance: 'Performance',
+    performance_monitor: 'Performance Monitor',
+    loading_metrics: 'Loading Metrics',
+    auto_optimization: 'Auto Optimization',
+    performance_settings: 'Configure performance monitoring and optimization',
+    
+    // Dashboard
+    live_camera: 'Live Camera',
+    view_mode: 'View Mode',
+    grid_view: 'Grid View',
+    list_view: 'List View',
+    no_vehicle_selected: 'No Vehicle Selected',
+    click_to_select_vehicle: 'Click on a vehicle in the list to see its details'
   },
   'es-ES': {
     // Dashboard
@@ -240,7 +270,22 @@ const translations = {
     
     // Common
     no_location_data: 'Sin datos de ubicación',
-    select_device_details: 'Selecciona un dispositivo para ver detalles'
+    select_device_details: 'Selecciona un dispositivo para ver detalles',
+    
+    // Performance
+    performance: 'Rendimiento',
+    performance_monitor: 'Monitor de Rendimiento',
+    loading_metrics: 'Métricas de Carga',
+    auto_optimization: 'Optimización Automática',
+    performance_settings: 'Configure el monitoreo y optimización de rendimiento',
+    
+    // Dashboard
+    live_camera: 'Cámara en Vivo',
+    view_mode: 'Modo de Vista',
+    grid_view: 'Vista de Cuadrícula',
+    list_view: 'Vista de Lista',
+    no_vehicle_selected: 'Ningún Vehículo Seleccionado',
+    click_to_select_vehicle: 'Haga clic en un vehículo de la lista para ver sus detalles'
   }
 };
 

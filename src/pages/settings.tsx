@@ -1,5 +1,5 @@
-import React from 'react';
-import { Card, Typography, List, Switch, Button, Divider, Space, Avatar, Row, Col, Select, Radio } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Typography, List, Switch, Button, Divider, Space, Avatar, Row, Col, Select, Radio, Alert } from 'antd';
 import { 
   UserOutlined, 
   BellOutlined, 
@@ -7,7 +7,9 @@ import {
   GlobalOutlined,
   LogoutOutlined,
   SettingOutlined,
-  BulbOutlined
+  BulbOutlined,
+  DashboardOutlined,
+  MonitorOutlined
 } from '@ant-design/icons';
 import { useLogout } from '@refinedev/core';
 import { useLanguage, Language } from '../contexts/LanguageContext';
@@ -20,9 +22,36 @@ export const SettingsPage: React.FC = () => {
   const { mutate: logout } = useLogout();
   const { language, setLanguage, t } = useLanguage();
   const { theme, setTheme, toggleTheme } = useTheme();
+  
+  // Estados para configurações de performance
+  const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(() => {
+    return localStorage.getItem('trackmax-show-performance-monitor') === 'true';
+  });
+  const [showLoadingMetrics, setShowLoadingMetrics] = useState(() => {
+    return localStorage.getItem('trackmax-show-loading-metrics') === 'true';
+  });
+  const [autoOptimizePerformance, setAutoOptimizePerformance] = useState(() => {
+    return localStorage.getItem('trackmax-auto-optimize-performance') === 'true';
+  });
 
   const handleLogout = () => {
     logout();
+  };
+
+  // Funções para salvar configurações de performance
+  const handlePerformanceMonitorChange = (checked: boolean) => {
+    setShowPerformanceMonitor(checked);
+    localStorage.setItem('trackmax-show-performance-monitor', checked.toString());
+  };
+
+  const handleLoadingMetricsChange = (checked: boolean) => {
+    setShowLoadingMetrics(checked);
+    localStorage.setItem('trackmax-show-loading-metrics', checked.toString());
+  };
+
+  const handleAutoOptimizeChange = (checked: boolean) => {
+    setAutoOptimizePerformance(checked);
+    localStorage.setItem('trackmax-auto-optimize-performance', checked.toString());
   };
 
   const settingsData = [
@@ -109,6 +138,40 @@ export const SettingsPage: React.FC = () => {
           )
         }
       ]
+    },
+    {
+      title: t('performance'),
+      description: t('performance_settings'),
+      icon: <MonitorOutlined />,
+      actions: [
+        {
+          label: t('performance_monitor'),
+          component: (
+            <Switch 
+              checked={showPerformanceMonitor}
+              onChange={handlePerformanceMonitorChange}
+            />
+          )
+        },
+        {
+          label: t('loading_metrics'),
+          component: (
+            <Switch 
+              checked={showLoadingMetrics}
+              onChange={handleLoadingMetricsChange}
+            />
+          )
+        },
+        {
+          label: t('auto_optimization'),
+          component: (
+            <Switch 
+              checked={autoOptimizePerformance}
+              onChange={handleAutoOptimizeChange}
+            />
+          )
+        }
+      ]
     }
   ];
 
@@ -136,6 +199,17 @@ export const SettingsPage: React.FC = () => {
           </Col>
         </Row>
       </Card>
+
+      {/* Performance Info Alert */}
+      {showPerformanceMonitor && (
+        <Alert
+          message="Configurações de Performance Ativas"
+          description="O monitor de performance está ativo e ajudará a otimizar o uso de recursos do seu notebook. As configurações são salvas automaticamente."
+          type="info"
+          showIcon
+          style={{ marginBottom: '16px' }}
+        />
+      )}
 
       {/* Settings Sections */}
       {settingsData.map((section, index) => (

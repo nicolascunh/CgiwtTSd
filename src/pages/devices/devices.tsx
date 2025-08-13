@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Card, Typography, Row, Col, Tabs, Button, Tag, Avatar, Space, Timeline, Statistic, Select, Divider } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Layout, Card, Typography, Row, Col, Tabs, Button, Tag, Avatar, Space, Timeline, Statistic, Select, Divider, Spin, Alert, Switch } from 'antd';
 import { 
   CarOutlined, 
   UserOutlined, 
@@ -8,11 +8,15 @@ import {
   PhoneOutlined,
   MailOutlined,
   CalendarOutlined,
-  DashboardOutlined
+  DashboardOutlined,
+  SettingOutlined
 } from '@ant-design/icons';
 import { useTrackmaxApi } from '../../hooks/useTrackmaxApi';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { LiveMap } from '../../components/LiveMap';
+import { VirtualizedDeviceList } from '../../components/VirtualizedDeviceList';
+import { PerformanceLoader } from '../../components/PerformanceLoader';
+import { PerformanceDashboard } from '../../components/PerformanceDashboard';
 import type { Device, Position } from '../../types';
 
 const { Content } = Layout;
@@ -23,38 +27,141 @@ export const DevicesPage: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [selectedTimeFilter, setSelectedTimeFilter] = useState('today');
-  const { fetchDevices, fetchPositions, loading, error } = useTrackmaxApi();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deviceFilter, setDeviceFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMoreDevices, setHasMoreDevices] = useState(true);
+  const [deviceStats, setDeviceStats] = useState<Record<number, any>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [showPerformanceMonitor, setShowPerformanceMonitor] = useState(() => {
+    return localStorage.getItem('trackmax-show-performance-monitor') === 'true';
+  });
+  const [showLoadingMetrics, setShowLoadingMetrics] = useState(() => {
+    return localStorage.getItem('trackmax-show-loading-metrics') === 'true';
+  });
+  
+    const { 
+    fetchDevices, 
+    fetchPositions, 
+    fetchPositionsInBatches,
+    fetchDeviceStats, 
+    loading, 
+    error 
+  } = useTrackmaxApi();
   const { t } = useLanguage();
 
-  // Carregar dados quando o componente montar
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const devicesData = await fetchDevices();
-        setDevices(devicesData);
-        
-        if (devicesData.length > 0) {
-          setSelectedDevice(devicesData[0]);
-          
-          // Buscar posições para todos os dispositivos
-          const allPositions: Position[] = [];
-          for (const device of devicesData) {
-            try {
-              const devicePositions = await fetchPositions(device.id);
-              allPositions.push(...devicePositions);
-            } catch (err) {
-              console.error(`Erro ao buscar posições do dispositivo ${device.id}:`, err);
-            }
-          }
-          setPositions(allPositions);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar dados:', err);
+  // Carregar dispositivos com paginação e progresso
+  const loadDevices = useCallback(async (page: number = 1, append: boolean = false) => {
+    try {
+      setLoadingProgress(20);
+      
+      const result = await fetchDevices(page, 50, {
+        search: searchTerm || undefined,
+        status: deviceFilter === 'all' ? undefined : deviceFilter
+      });
+      
+      setLoadingProgress(60);
+      
+      if (append) {
+        setDevices(prev => [...prev, ...result.devices]);
+      } else {
+        setDevices(result.devices);
       }
+      
+      setHasMoreDevices(result.hasMore);
+      setCurrentPage(page);
+      
+      // Selecionar primeiro dispositivo se não houver seleção
+      if (result.devices.length > 0 && !selectedDevice) {
+        setSelectedDevice(result.devices[0]);
+      }
+      
+      setLoadingProgress(80);
+    } catch (err) {
+      console.error('Erro ao carregar dispositivos:', err);
+    }
+  }, [fetchDevices, searchTerm, deviceFilter, selectedDevice]);
+
+  // Carregar posições otimizadas
+  const loadPositions = useCallback(async () => {
+    try {
+      setLoadingProgress(85);
+      
+      // Buscar posições em lotes para melhor performance
+      const deviceIds = devices.map(d => d.id);
+      const positionsData = await fetchPositionsInBatches(deviceIds, 20, 1000);
+      setPositions(positionsData);
+      
+      setLoadingProgress(95);
+    } catch (err) {
+      console.error('Erro ao carregar posições:', err);
+    }
+  }, [fetchPositionsInBatches, devices]);
+
+  // Carregar estatísticas do dispositivo selecionado
+  const loadDeviceStats = useCallback(async (deviceId: number) => {
+    if (deviceStats[deviceId]) return; // Já carregado
+    
+    try {
+      const stats = await fetchDeviceStats(deviceId);
+      setDeviceStats(prev => ({
+        ...prev,
+        [deviceId]: stats
+      }));
+    } catch (err) {
+      console.error('Erro ao carregar estatísticas:', err);
+    }
+  }, [fetchDeviceStats, deviceStats]);
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    const initializeData = async () => {
+      setIsLoading(true);
+      setLoadingProgress(0);
+      
+      await loadDevices(1, false);
+      setLoadingProgress(100);
+      
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 500);
     };
 
-    loadData();
+    initializeData();
   }, []);
+
+  // Carregar posições quando dispositivos mudarem
+  useEffect(() => {
+    if (devices.length > 0 && !isLoading) {
+      loadPositions();
+    }
+  }, [loadPositions, devices, isLoading]);
+
+  // Carregar estatísticas quando dispositivo selecionado mudar
+  useEffect(() => {
+    if (selectedDevice) {
+      loadDeviceStats(selectedDevice.id);
+    }
+  }, [selectedDevice, loadDeviceStats]);
+
+  // Sincronizar configurações de performance do localStorage
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setShowPerformanceMonitor(localStorage.getItem('trackmax-show-performance-monitor') === 'true');
+      setShowLoadingMetrics(localStorage.getItem('trackmax-show-loading-metrics') === 'true');
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Carregar mais dispositivos (infinite scroll)
+  const loadMoreDevices = useCallback(() => {
+    if (hasMoreDevices && !loading) {
+      loadDevices(currentPage + 1, true);
+    }
+  }, [hasMoreDevices, loading, currentPage, loadDevices]);
 
   // Mock data para driver
   const mockDriver = {
@@ -95,14 +202,6 @@ export const DevicesPage: React.FC = () => {
     }
   ];
 
-  // Mock data para estatísticas
-  const mockStats = {
-    totalDistance: 245.7,
-    totalTime: 8.5,
-    averageSpeed: 28.9,
-    fuelConsumption: 45.2
-  };
-
   const timeFilterOptions = [
     { value: 'today', label: t('today') },
     { value: 'week', label: t('this_week') },
@@ -130,8 +229,8 @@ export const DevicesPage: React.FC = () => {
             <Col span={12}>
               <Text type="secondary">{t('status')}:</Text>
               <br />
-              <Tag color={selectedDevice?.status === 'online' && !selectedDevice?.disabled ? "green" : "red"}>
-                {selectedDevice?.status === 'online' && !selectedDevice?.disabled ? t('online') : t('offline')}
+              <Tag color={selectedDevice?.disabled ? 'red' : 'green'}>
+                {selectedDevice?.disabled ? t('offline') : t('online')}
               </Tag>
             </Col>
             <Col span={12}>
@@ -140,20 +239,18 @@ export const DevicesPage: React.FC = () => {
               <Text strong>{selectedDevice?.phone || 'N/A'}</Text>
             </Col>
             <Col span={12}>
-              <Text type="secondary">{t('contact')}:</Text>
-              <br />
-              <Text strong>{selectedDevice?.contact || 'N/A'}</Text>
-            </Col>
-            <Col span={12}>
               <Text type="secondary">{t('category')}:</Text>
               <br />
               <Text strong>{selectedDevice?.category || 'N/A'}</Text>
             </Col>
-            <Col span={24}>
+            <Col span={12}>
               <Text type="secondary">{t('last_update')}:</Text>
               <br />
               <Text strong>
-                {selectedDevice?.lastUpdate ? new Date(selectedDevice.lastUpdate).toLocaleString() : 'N/A'}
+                {selectedDevice?.lastUpdate 
+                  ? new Date(selectedDevice.lastUpdate).toLocaleString()
+                  : 'N/A'
+                }
               </Text>
             </Col>
           </Row>
@@ -165,64 +262,53 @@ export const DevicesPage: React.FC = () => {
       label: t('tracking'),
       children: (
         <div>
-          <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col span={6}>
               <Statistic
                 title={t('total_distance')}
-                value={mockStats.totalDistance}
+                value={deviceStats[selectedDevice?.id || 0]?.totalDistance || 0}
                 suffix="km"
-                valueStyle={{ color: '#1890ff' }}
+                precision={1}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title={t('total_time')}
-                value={mockStats.totalTime}
+                value={deviceStats[selectedDevice?.id || 0]?.totalTime || 0}
                 suffix="h"
-                valueStyle={{ color: '#52c41a' }}
+                precision={1}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title={t('average_speed')}
-                value={mockStats.averageSpeed}
+                value={deviceStats[selectedDevice?.id || 0]?.averageSpeed || 0}
                 suffix="km/h"
-                valueStyle={{ color: '#faad14' }}
+                precision={1}
               />
             </Col>
             <Col span={6}>
               <Statistic
                 title={t('fuel_consumption')}
-                value={mockStats.fuelConsumption}
+                value={45.2}
                 suffix="L"
-                valueStyle={{ color: '#ff4d4f' }}
+                precision={1}
               />
             </Col>
           </Row>
-
-          <div style={{ marginBottom: '16px' }}>
-            <Text strong>{t('recent_activity')}</Text>
-          </div>
-
+          
+          <Divider />
+          
+          <Title level={5}>{t('recent_activity')}</Title>
           <Timeline
-            items={mockTimeline.map((item, index) => ({
-              key: index,
+            items={mockTimeline.map(item => ({
               children: (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <Text strong>{item.event}</Text>
-                      <br />
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        <EnvironmentOutlined style={{ marginRight: '4px' }} />
-                        {item.location}
-                      </Text>
-                    </div>
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                      <ClockCircleOutlined style={{ marginRight: '4px' }} />
-                      {item.time}
-                    </Text>
-                  </div>
+                  <Text strong>{item.time}</Text> - {item.event}
+                  <br />
+                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                    {item.location}
+                  </Text>
                 </div>
               )
             }))}
@@ -235,14 +321,14 @@ export const DevicesPage: React.FC = () => {
       label: t('driver'),
       children: (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-            <Avatar size={64} icon={<UserOutlined />} style={{ marginRight: '16px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+            <Avatar size={48} icon={<UserOutlined />} style={{ marginRight: 12 }} />
             <div>
-              <Title level={4} style={{ margin: 0 }}>{mockDriver.name}</Title>
-              <Text type="secondary">ID: {mockDriver.id}</Text>
+              <div><Text strong>{mockDriver.name}</Text></div>
+              <div><Text type="secondary">#{mockDriver.id}</Text></div>
             </div>
           </div>
-
+          
           <Row gutter={[16, 16]}>
             <Col span={12}>
               <Text type="secondary">{t('phone')}:</Text>
@@ -265,9 +351,9 @@ export const DevicesPage: React.FC = () => {
               <Tag color="green">{mockDriver.status}</Tag>
             </Col>
           </Row>
-
+          
           <Divider />
-
+          
           <Space>
             <Button type="primary" icon={<PhoneOutlined />}>
               {t('call_driver')}
@@ -288,7 +374,7 @@ export const DevicesPage: React.FC = () => {
             <Col span={12}>
               <Text type="secondary">{t('company_name')}:</Text>
               <br />
-              <Text strong>TrackMax Transportes Ltda</Text>
+              <Text strong>Transportadora ABC Ltda</Text>
             </Col>
             <Col span={12}>
               <Text type="secondary">{t('cnpj')}:</Text>
@@ -301,9 +387,9 @@ export const DevicesPage: React.FC = () => {
               <Text strong>Rua das Flores, 123 - São Paulo, SP</Text>
             </Col>
             <Col span={12}>
-              <Text type="secondary">{t('phone')}:</Text>
+              <Text type="secondary">{t('email')}:</Text>
               <br />
-              <Text strong>+55 11 3333-3333</Text>
+              <Text strong>contato@transportadoraabc.com</Text>
             </Col>
           </Row>
         </div>
@@ -311,122 +397,132 @@ export const DevicesPage: React.FC = () => {
     }
   ];
 
-  if (loading) {
+  // Mostrar loading elegante
+  if (isLoading) {
     return (
-      <Content style={{ padding: '24px', textAlign: 'center' }}>
-        <div>Carregando dispositivos...</div>
-      </Content>
-    );
-  }
-
-  if (error) {
-    return (
-      <Content style={{ padding: '24px' }}>
-        <div>Erro ao carregar dados: {error}</div>
+      <Content style={{ margin: '0 16px', padding: '24px', background: '#f0f2f5' }}>
+        <PerformanceLoader
+          loading={isLoading}
+          message="Carregando sistema de monitoramento..."
+          progress={loadingProgress}
+          showMetrics={showLoadingMetrics}
+          deviceCount={devices.length}
+          onComplete={() => setIsLoading(false)}
+        />
       </Content>
     );
   }
 
   return (
-    <Layout style={{ height: '100vh', background: '#f0f2f5' }}>
-      <Content style={{ padding: '16px' }}>
-        <Row gutter={[16, 16]} style={{ height: '100%' }}>
-          {/* Painel Esquerdo - Lista de Dispositivos e Detalhes */}
-          <Col span={12} style={{ height: '100%' }}>
-            <Row gutter={[0, 16]} style={{ height: '100%' }}>
-              {/* Lista de Dispositivos */}
-              <Col span={24}>
-                <Card 
-                  title={
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>{t('vehicles')}</span>
-                      <Select
-                        value={selectedTimeFilter}
-                        onChange={setSelectedTimeFilter}
-                        options={timeFilterOptions}
-                        style={{ width: 120 }}
-                      />
-                    </div>
-                  }
-                  style={{ height: '300px', overflow: 'auto' }}
+    <Content style={{ margin: '0 16px', padding: '24px', background: '#f0f2f5' }}>
+      {/* Dashboard de Performance */}
+      <PerformanceDashboard
+        deviceCount={devices.length}
+        isVisible={showPerformanceMonitor}
+      />
+      
+
+      
+      {error && (
+        <Alert
+          message="Erro"
+          description={error}
+          type="error"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+      
+      <Row gutter={[24, 24]} style={{ height: 'calc(100vh - 120px)' }}>
+        {/* Lista de Dispositivos */}
+        <Col span={8} style={{ height: '100%' }}>
+          <Card 
+            title={t('vehicles')} 
+            style={{ height: '100%', borderRadius: '12px' }}
+            styles={{ body: { height: 'calc(100% - 57px)', padding: '16px' } }}
+          >
+            {/* Filtros */}
+            <div style={{ marginBottom: 16 }}>
+              <Space>
+                <Button 
+                  type={deviceFilter === 'all' ? 'primary' : 'default'}
+                  onClick={() => setDeviceFilter('all')}
                 >
-                  {devices.map((device) => {
-                    const devicePosition = positions.find(p => p.deviceId === device.id);
-                    const isOnline = device.status === 'online' && !device.disabled;
-                    const isSelected = selectedDevice?.id === device.id;
-
-                    return (
-                      <Card
-                        key={device.id}
-                        size="small"
-                        style={{ 
-                          marginBottom: '8px', 
-                          cursor: 'pointer',
-                          border: isSelected ? '2px solid #1890ff' : '1px solid #d9d9d9'
-                        }}
-                        onClick={() => setSelectedDevice(device)}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                              <CarOutlined style={{ marginRight: '8px', color: isOnline ? '#52c41a' : '#ff4d4f' }} />
-                              <Text strong>{device.name}</Text>
-                            </div>
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                              ID: {device.uniqueId}
-                            </Text>
-                            {devicePosition && (
-                              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                                <EnvironmentOutlined style={{ marginRight: '4px' }} />
-                                {devicePosition.address || `${devicePosition.latitude}, ${devicePosition.longitude}`}
-                              </div>
-                            )}
-                          </div>
-                          <Tag color={isOnline ? "green" : "red"}>
-                            {isOnline ? t('online') : t('offline')}
-                          </Tag>
-                        </div>
-                      </Card>
-                    );
-                  })}
-                </Card>
-              </Col>
-
-              {/* Detalhes do Dispositivo */}
-              <Col span={24} style={{ flex: 1 }}>
-                <Card 
-                  title={selectedDevice ? selectedDevice.name : t('select_vehicle')}
-                  style={{ height: 'calc(100vh - 400px)', overflow: 'auto' }}
+                  {t('all')} {devices.length}
+                </Button>
+                <Button 
+                  type={deviceFilter === 'online' ? 'primary' : 'default'}
+                  onClick={() => setDeviceFilter('online')}
                 >
-                  {selectedDevice ? (
-                    <Tabs defaultActiveKey="general" items={tabItems} />
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '40px' }}>
-                      <Text type="secondary">{t('select_vehicle_details')}</Text>
-                    </div>
-                  )}
-                </Card>
-              </Col>
-            </Row>
-          </Col>
+                  {t('active')} {devices.filter(d => !d.disabled).length}
+                </Button>
+                <Button 
+                  type={deviceFilter === 'offline' ? 'primary' : 'default'}
+                  onClick={() => setDeviceFilter('offline')}
+                >
+                  {t('inactive')} {devices.filter(d => d.disabled).length}
+                </Button>
+              </Space>
+            </div>
 
-          {/* Painel Direito - Mapa */}
-          <Col span={12} style={{ height: '100%' }}>
-            <Card 
-              title={t('live_map')}
-              style={{ height: '100%' }}
-              bodyStyle={{ height: 'calc(100% - 57px)', padding: 0 }}
-            >
-              <LiveMap
-                devices={devices}
-                positions={positions}
-                selectedDevice={selectedDevice}
-                onDeviceSelect={setSelectedDevice}
-              />
-            </Card>
-          </Col>
-        </Row>
-      </Content>
-    </Layout>
+            {/* Lista Virtualizada */}
+            <VirtualizedDeviceList
+              devices={devices}
+              positions={positions}
+              selectedDevice={selectedDevice}
+              onDeviceSelect={setSelectedDevice}
+              loading={loading}
+              searchTerm={searchTerm}
+              onSearchChange={setSearchTerm}
+              deviceFilter={deviceFilter}
+            />
+          </Card>
+        </Col>
+
+        {/* Mapa e Detalhes */}
+        <Col span={16} style={{ height: '100%' }}>
+          <Row gutter={[0, 16]} style={{ height: '100%' }}>
+            {/* Mapa */}
+            <Col span={24} style={{ height: '60%' }}>
+              <Card 
+                title={t('live_map')} 
+                style={{ height: '100%', borderRadius: '12px' }}
+                styles={{ body: { height: 'calc(100% - 57px)', padding: '8px' } }}
+              >
+                <LiveMap
+                  devices={devices}
+                  positions={positions}
+                  selectedDevice={selectedDevice}
+                  onDeviceSelect={setSelectedDevice}
+                />
+              </Card>
+            </Col>
+
+            {/* Detalhes do Dispositivo */}
+            <Col span={24} style={{ height: '40%' }}>
+              <Card 
+                title={selectedDevice ? selectedDevice.name : t('select_vehicle')}
+                style={{ height: '100%', borderRadius: '12px' }}
+                styles={{ body: { height: 'calc(100% - 57px)', padding: '16px' } }}
+              >
+                {selectedDevice ? (
+                  <Tabs
+                    defaultActiveKey="general"
+                    items={tabItems}
+                    size="small"
+                    style={{ height: '100%' }}
+                  />
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px' }}>
+                    <CarOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 16 }} />
+                    <Text type="secondary">{t('select_vehicle_details')}</Text>
+                  </div>
+                )}
+              </Card>
+            </Col>
+          </Row>
+        </Col>
+      </Row>
+    </Content>
   );
 };
