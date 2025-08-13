@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, Row, Col, Tabs, Divider, Spin, Alert } from 'antd';
+import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, Row, Col, Tabs, Divider, Spin, Alert, Modal } from 'antd';
 import { 
   CarOutlined, 
   UserOutlined, 
@@ -11,19 +11,23 @@ import {
   CameraOutlined,
   PhoneOutlined,
   EnvironmentOutlined,
-  DashboardOutlined
+  DashboardOutlined,
+  LogoutOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
+import { useLogout } from '@refinedev/core';
 import { useTrackmaxApi } from '../hooks/useTrackmaxApi';
+import { useLanguage } from '../contexts/LanguageContext';
 import type { Device, Position } from '../types';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
-const { TabPane } = Tabs;
 
 interface DashboardProps {
   children?: React.ReactNode;
 }
+
+type DeviceFilter = 'all' | 'online' | 'offline';
 
 export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
@@ -31,9 +35,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all');
   const navigate = useNavigate();
   const location = useLocation();
+  const { mutate: logout } = useLogout();
   const { fetchDevices, fetchPositions, loading, error } = useTrackmaxApi();
+  const { t } = useLanguage();
 
   // Debug log
   useEffect(() => {
@@ -63,50 +71,89 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     loadData();
   }, []);
 
+  const handleLogout = () => {
+    setLogoutModalVisible(true);
+  };
+
+  const confirmLogout = () => {
+    logout();
+    setLogoutModalVisible(false);
+  };
+
+  const cancelLogout = () => {
+    setLogoutModalVisible(false);
+  };
+
   const menuItems = [
     {
       key: 'dashboard',
       icon: <DashboardOutlined />,
-      label: 'Dashboard',
+      label: t('dashboard'),
       onClick: () => navigate('/')
     },
     {
       key: 'vehicles',
       icon: <CarOutlined />,
-      label: 'Vehicles',
+      label: t('vehicles'),
       onClick: () => navigate('/devices')
     },
     {
       key: 'drivers',
       icon: <UserOutlined />,
-      label: 'Drivers',
+      label: t('drivers'),
       onClick: () => navigate('/drivers')
     },
     {
       key: 'reports',
       icon: <AppstoreOutlined />,
-      label: 'Reports',
+      label: t('reports'),
       onClick: () => navigate('/route-reports')
     },
     {
       key: 'notifications',
       icon: <BellOutlined />,
-      label: 'Notifications',
+      label: t('notifications'),
       onClick: () => navigate('/notifications')
     },
     {
       key: 'settings',
       icon: <SettingOutlined />,
-      label: 'Settings',
-      onClick: () => navigate('/settings')
+      label: t('settings'),
+      children: [
+        {
+          key: 'settings-page',
+          icon: <SettingOutlined />,
+          label: t('settings'),
+          onClick: () => navigate('/settings')
+        },
+        {
+          key: 'logout',
+          icon: <LogoutOutlined />,
+          label: t('logout'),
+          onClick: handleLogout
+        }
+      ]
     }
   ];
 
-  // Filtrar dispositivos baseado no termo de busca
-  const filteredDevices = devices.filter(device =>
-    device.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    device.uniqueId.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filtrar dispositivos baseado no termo de busca e filtro
+  const filteredDevices = devices.filter(device => {
+    const matchesSearch = device.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         device.uniqueId.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesFilter = (() => {
+      switch (deviceFilter) {
+        case 'online':
+          return device.status === 'online' && !device.disabled;
+        case 'offline':
+          return device.status !== 'online' || device.disabled;
+        default:
+          return true;
+      }
+    })();
+
+    return matchesSearch && matchesFilter;
+  });
 
   // Contadores
   const totalDevices = devices.length;
@@ -116,12 +163,127 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   // Check if we're on the main dashboard page
   const isMainDashboard = location.pathname === '/' || location.pathname === '/dashboard';
 
+  // Tab items para o dashboard
+  const tabItems = [
+    {
+      key: 'vehicle-info',
+      label: t('vehicle_info'),
+      children: (
+        <>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={{
+              width: '120px',
+              height: '80px',
+              background: '#1890ff',
+              borderRadius: '8px',
+              margin: '0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: '24px'
+            }}>
+              🚛
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <Title level={5}>{t('information')}</Title>
+            <Row gutter={[0, 8]}>
+              <Col span={12}>
+                <Text type="secondary">{t('id')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>{selectedDevice?.uniqueId}</Text>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary">{t('model')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>{selectedDevice?.model || 'N/A'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary">{t('status')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Tag color={selectedDevice?.status === 'online' ? "green" : "red"}>
+                  {selectedDevice?.status}
+                </Tag>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary">{t('phone')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>{selectedDevice?.phone || 'N/A'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary">{t('contact')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>{selectedDevice?.contact || 'N/A'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary">{t('category')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>{selectedDevice?.category || 'N/A'}</Text>
+              </Col>
+              <Col span={12}>
+                <Text type="secondary">{t('last_update')}:</Text>
+              </Col>
+              <Col span={12}>
+                <Text strong>
+                  {selectedDevice?.lastUpdate ? new Date(selectedDevice.lastUpdate).toLocaleString() : 'N/A'}
+                </Text>
+              </Col>
+            </Row>
+          </div>
+
+          <Divider />
+
+          <div>
+            <Title level={5}>{t('driver')}</Title>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <Avatar size={48} icon={<UserOutlined />} style={{ marginRight: '12px' }} />
+              <div>
+                <div><Text strong>N/A</Text></div>
+                <div><Text type="secondary">{t('driver_info_not_available')}</Text></div>
+              </div>
+            </div>
+            <Button 
+              type="primary" 
+              icon={<PhoneOutlined />}
+              style={{ background: '#722ed1', borderColor: '#722ed1' }}
+            >
+              {t('contact')}
+            </Button>
+          </div>
+        </>
+      )
+    },
+    {
+      key: 'actions',
+      label: t('actions'),
+      children: <p>Actions content</p>
+    },
+    {
+      key: 'reports',
+      label: t('reports'),
+      children: <p>Reports content</p>
+    },
+    {
+      key: 'company',
+      label: t('company'),
+      children: <p>Company content</p>
+    }
+  ];
+
   if (error) {
     return (
       <Layout style={{ minHeight: '100vh' }}>
         <Content style={{ padding: '24px' }}>
           <Alert
-            message="Erro ao carregar dados"
+            message={t('error_loading_data')}
             description={error}
             type="error"
             showIcon
@@ -146,7 +308,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       >
         <div style={{ padding: '16px', textAlign: 'center' }}>
           <Title level={4} style={{ color: '#fff', margin: 0 }}>
-            {collapsed ? 'FMS' : 'TrackMax'}
+            {collapsed ? 'TM' : 'TrackMax'}
           </Title>
         </div>
         
@@ -154,6 +316,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           theme="dark"
           mode="inline"
           defaultSelectedKeys={['dashboard']}
+          defaultOpenKeys={['settings']}
           items={menuItems}
           style={{
             background: '#1a1a2e',
@@ -176,9 +339,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
               <Col span={16}>
                 <Card style={{ borderRadius: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <Title level={4} style={{ margin: 0 }}>Vehicles</Title>
+                    <Title level={4} style={{ margin: 0 }}>{t('vehicles')}</Title>
                     <Input 
-                      placeholder="Search vehicles..." 
+                      placeholder={t('search_vehicles')} 
                       prefix={<SearchOutlined />}
                       style={{ width: 250 }}
                       value={searchTerm}
@@ -189,9 +352,24 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   {/* Filter tabs */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <Space>
-                      <Button type="text">All {totalDevices}</Button>
-                      <Button type="text">Active {activeDevices}</Button>
-                      <Button type="text">Inactive {inactiveDevices}</Button>
+                      <Button 
+                        type={deviceFilter === 'all' ? 'primary' : 'text'}
+                        onClick={() => setDeviceFilter('all')}
+                      >
+                        {t('all')} {totalDevices}
+                      </Button>
+                      <Button 
+                        type={deviceFilter === 'online' ? 'primary' : 'text'}
+                        onClick={() => setDeviceFilter('online')}
+                      >
+                        {t('active')} {activeDevices}
+                      </Button>
+                      <Button 
+                        type={deviceFilter === 'offline' ? 'primary' : 'text'}
+                        onClick={() => setDeviceFilter('offline')}
+                      >
+                        {t('inactive')} {inactiveDevices}
+                      </Button>
                     </Space>
                     <Space>
                       <Button icon={<BarsOutlined />} />
@@ -203,7 +381,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   {loading ? (
                     <div style={{ textAlign: 'center', padding: '40px' }}>
                       <Spin size="large" />
-                      <div style={{ marginTop: '16px' }}>Carregando dispositivos...</div>
+                      <div style={{ marginTop: '16px' }}>{t('loading_devices')}</div>
                     </div>
                   ) : (
                     <Row gutter={[16, 16]}>
@@ -216,14 +394,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                             <Card 
                               hoverable
                               style={{ borderRadius: '8px' }}
-                              bodyStyle={{ padding: '16px' }}
+                              styles={{ body: { padding: '16px' } }}
                               onClick={() => setSelectedDevice(device)}
                             >
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                                 <div>
                                   <Title level={5} style={{ margin: 0 }}>{device.name}</Title>
                                   <Tag color={isOnline ? "green" : "red"} style={{ marginTop: '4px' }}>
-                                    {isOnline ? 'Online' : 'Offline'}
+                                    {isOnline ? t('online') : t('offline')}
                                   </Tag>
                                 </div>
                                 <Button 
@@ -232,7 +410,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                   size="small"
                                   style={{ background: '#722ed1', borderColor: '#722ed1' }}
                                 >
-                                  Live câmera
+                                  {t('live_camera')}
                                 </Button>
                               </div>
                               
@@ -253,7 +431,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                     fontSize: '12px',
                                     color: '#999'
                                   }}>
-                                    Sem dados de localização
+                                    {t('no_location_data')}
                                   </div>
                                 )}
                                 
@@ -262,9 +440,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                   color: '#666',
                                   marginTop: '8px'
                                 }}>
-                                  <div>ID: {device.uniqueId}</div>
-                                  <div>Modelo: {device.model || 'N/A'}</div>
-                                  <div>Última atualização: {device.lastUpdate ? new Date(device.lastUpdate).toLocaleString() : 'N/A'}</div>
+                                  <div>{t('id')}: {device.uniqueId}</div>
+                                  <div>{t('model')}: {device.model || 'N/A'}</div>
+                                  <div>{t('last_update')}: {device.lastUpdate ? new Date(device.lastUpdate).toLocaleString() : 'N/A'}</div>
                                 </div>
                               </div>
                             </Card>
@@ -284,115 +462,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                       <div style={{ marginBottom: '16px' }}>
                         <Title level={4} style={{ margin: 0 }}>{selectedDevice.name}</Title>
                         <Tag color={selectedDevice.status === 'online' && !selectedDevice.disabled ? "green" : "red"}>
-                          {selectedDevice.status === 'online' && !selectedDevice.disabled ? 'Online' : 'Offline'}
+                          {selectedDevice.status === 'online' && !selectedDevice.disabled ? t('online') : t('offline')}
                         </Tag>
                       </div>
 
-                      <Tabs defaultActiveKey="vehicle-info">
-                        <TabPane tab="Vehicle info" key="vehicle-info">
-                          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                            <div style={{
-                              width: '120px',
-                              height: '80px',
-                              background: '#1890ff',
-                              borderRadius: '8px',
-                              margin: '0 auto',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'white',
-                              fontSize: '24px'
-                            }}>
-                              🚛
-                            </div>
-                          </div>
-
-                          <div style={{ marginBottom: '24px' }}>
-                            <Title level={5}>INFORMATIONS</Title>
-                            <Row gutter={[0, 8]}>
-                              <Col span={12}>
-                                <Text type="secondary">ID:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text strong>{selectedDevice.uniqueId}</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text type="secondary">Model:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text strong>{selectedDevice.model || 'N/A'}</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text type="secondary">Status:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Tag color={selectedDevice.status === 'online' ? "green" : "red"}>
-                                  {selectedDevice.status}
-                                </Tag>
-                              </Col>
-                              <Col span={12}>
-                                <Text type="secondary">Phone:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text strong>{selectedDevice.phone || 'N/A'}</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text type="secondary">Contact:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text strong>{selectedDevice.contact || 'N/A'}</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text type="secondary">Category:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text strong>{selectedDevice.category || 'N/A'}</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text type="secondary">Last Update:</Text>
-                              </Col>
-                              <Col span={12}>
-                                <Text strong>
-                                  {selectedDevice.lastUpdate ? new Date(selectedDevice.lastUpdate).toLocaleString() : 'N/A'}
-                                </Text>
-                              </Col>
-                            </Row>
-                          </div>
-
-                          <Divider />
-
-                          <div>
-                            <Title level={5}>DRIVER</Title>
-                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                              <Avatar size={48} icon={<UserOutlined />} style={{ marginRight: '12px' }} />
-                              <div>
-                                <div><Text strong>N/A</Text></div>
-                                <div><Text type="secondary">Driver information not available</Text></div>
-                              </div>
-                            </div>
-                            <Button 
-                              type="primary" 
-                              icon={<PhoneOutlined />}
-                              style={{ background: '#722ed1', borderColor: '#722ed1' }}
-                            >
-                              Contact
-                            </Button>
-                          </div>
-                        </TabPane>
-                        <TabPane tab="Actions" key="actions">
-                          <p>Actions content</p>
-                        </TabPane>
-                        <TabPane tab="Reports" key="reports">
-                          <p>Reports content</p>
-                        </TabPane>
-                        <TabPane tab="Company" key="company">
-                          <p>Company content</p>
-                        </TabPane>
-                      </Tabs>
+                      <Tabs defaultActiveKey="vehicle-info" items={tabItems} />
                     </>
                   ) : (
                     <div style={{ textAlign: 'center', padding: '40px' }}>
-                      <Text type="secondary">Selecione um dispositivo para ver os detalhes</Text>
+                      <Text type="secondary">{t('select_device_details')}</Text>
                     </div>
                   )}
                 </Card>
@@ -406,6 +484,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           )}
         </Content>
       </Layout>
+
+      {/* Logout Modal */}
+      <Modal
+        title={t('confirm_logout')}
+        open={logoutModalVisible}
+        onOk={confirmLogout}
+        onCancel={cancelLogout}
+        okText={t('logout')}
+        cancelText={t('cancel')}
+        okButtonProps={{ danger: true }}
+      >
+        <p>{t('confirm_logout_message')}</p>
+        <p style={{ fontSize: '12px', color: '#666' }}>
+          {t('redirect_login')}
+        </p>
+      </Modal>
     </Layout>
   );
 };

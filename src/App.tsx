@@ -11,6 +11,10 @@ import { LoginPage } from "./pages/login";
 import { TestAuthPage } from "./pages/test-auth";
 import { DebugPage } from "./pages/debug";
 import { Dashboard } from "./components/Dashboard";
+import { SettingsPage } from "./pages/settings";
+import { DevicesPage } from "./pages/devices";
+import { LanguageProvider } from "./contexts/LanguageContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import "@refinedev/antd/dist/reset.css";
 
 const API_URL = "http://35.230.168.225:8082";
@@ -18,96 +22,112 @@ const API_URL = "http://35.230.168.225:8082";
 const App = () => {
   return (
     <BrowserRouter>
-      <Refine
-        routerProvider={routerBindings}
-        authProvider={createAuthProvider(API_URL)}
-        dataProvider={createDataProvider(API_URL)}
-        notificationProvider={useNotificationProvider}
-        options={{
-          syncWithLocation: true,
-          warnWhenUnsavedChanges: true,
-        }}
-        resources={[
-          {
-            name: "devices",
-            list: "/devices",
-            show: "/devices/:id",
-            create: "/devices/create",
-            edit: "/devices/:id/edit",
-          },
-          {
-            name: "positions",
-            list: "/positions",
-            show: "/positions/:id",
-          },
-          {
-            name: "users",
-            list: "/users",
-            show: "/users/:id",
-            create: "/users/create",
-            edit: "/users/:id/edit",
-          },
-          {
-            name: "commands",
-            list: "/commands",
-            show: "/commands/:id",
-            create: "/commands/create",
-          },
-          {
-            name: "route-reports",
-            list: "/route-reports",
-            show: "/route-reports/:id",
-          },
-          {
-            name: "notifications",
-            list: "/notifications",
-            show: "/notifications/:id",
-            create: "/notifications/create",
-            edit: "/notifications/:id/edit",
-          },
-          {
-            name: "drivers",
-            list: "/drivers",
-            show: "/drivers/:id",
-            create: "/drivers/create",
-            edit: "/drivers/:id/edit",
-          },
-        ]}>
-        <Routes>
-          {/* Test auth route - accessible without authentication */}
-          <Route path="/test-auth" element={<TestAuthPage />} />
-          <Route path="/debug" element={<DebugPage />} />
-          
-          {/* Auth routes */}
-          <Route
-            element={
-              <Authenticated key="auth-routes" fallback={<Outlet />}>
-                <NavigateToResource resource="dashboard" />
-              </Authenticated>
-            }>
-            <Route path="/login" element={<LoginPage />} />
-          </Route>
+      <LanguageProvider>
+        <ThemeProvider>
+          <Refine
+            routerProvider={routerBindings}
+            authProvider={createAuthProvider(API_URL)}
+            dataProvider={createDataProvider(API_URL)}
+            notificationProvider={useNotificationProvider}
+            options={{
+              syncWithLocation: true,
+              warnWhenUnsavedChanges: true,
+            }}
+            resources={[
+              {
+                name: "dashboard",
+                list: "/",
+              },
+              {
+                name: "devices",
+                list: "/devices",
+                show: "/devices/:id",
+                create: "/devices/create",
+                edit: "/devices/:id/edit",
+              },
+              {
+                name: "positions",
+                list: "/positions",
+                show: "/positions/:id",
+              },
+              {
+                name: "users",
+                list: "/users",
+                show: "/users/:id",
+                create: "/users/create",
+                edit: "/users/:id/edit",
+              },
+              {
+                name: "commands",
+                list: "/commands",
+                show: "/commands/:id",
+                create: "/commands/create",
+              },
+              {
+                name: "route-reports",
+                list: "/route-reports",
+                show: "/route-reports/:id",
+              },
+              {
+                name: "notifications",
+                list: "/notifications",
+                show: "/notifications/:id",
+                create: "/notifications/create",
+                edit: "/notifications/:id/edit",
+              },
+              {
+                name: "drivers",
+                list: "/drivers",
+                show: "/drivers/:id",
+                create: "/drivers/create",
+                edit: "/drivers/:id/edit",
+              },
+              {
+                name: "settings",
+                list: "/settings",
+              },
+            ]}>
+            <Routes>
+              {/* Test auth route - accessible without authentication */}
+              <Route path="/test-auth" element={<TestAuthPage />} />
+              <Route path="/debug" element={<DebugPage />} />
+              
+              {/* Auth routes */}
+              <Route
+                element={
+                  <Authenticated key="auth-routes" fallback={<Outlet />}>
+                    <NavigateToResource resource="dashboard" />
+                  </Authenticated>
+                }>
+                <Route path="/login" element={<LoginPage />} />
+              </Route>
 
-          {/* Protected routes with custom Dashboard layout */}
-          <Route
-            element={
-              <Authenticated key="protected-routes" fallback={<CatchAllNavigate to="/login" />}>
-                <Dashboard>
-                  <Outlet />
-                </Dashboard>
-              </Authenticated>
-            }>
-            {/* Dashboard route */}
-            <Route index element={<DashboardPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            {/* Device routes */}
-            <Route path="/devices/:id" element={<DeviceShow />} />
-            {/* Catch all route */}
-            <Route path="*" element={<RefineAiErrorComponent />} />
-          </Route>
-        </Routes>
-        <UnsavedChangesNotifier />
-      </Refine>
+              {/* Protected routes with custom Dashboard layout */}
+              <Route
+                element={
+                  <Authenticated key="protected-routes" fallback={<CatchAllNavigate to="/login" />}>
+                    <Dashboard>
+                      <Outlet />
+                    </Dashboard>
+                  </Authenticated>
+                }>
+                {/* Dashboard route */}
+                <Route index element={<DashboardPage />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                {/* Settings route */}
+                <Route path="/settings" element={<SettingsPage />} />
+                {/* Devices route */}
+                <Route path="/devices" element={<DevicesPage />} />
+                {/* Device routes */}
+                <Route path="/devices/:id" element={<DeviceShow />} />
+                {/* Catch all route */}
+                <Route path="*" element={<RefineAiErrorComponent />} />
+              </Route>
+            </Routes>
+            <UnsavedChangesNotifier />
+          </Refine>
+        </ThemeProvider>
+      </LanguageProvider>
     </BrowserRouter>
   );
 };
