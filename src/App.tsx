@@ -9,6 +9,7 @@ import { DeviceShow } from "./pages/devices/show";
 import { DashboardPage } from "./pages/dashboard";
 import { LoginPage } from "./pages/login";
 import { TestAuthPage } from "./pages/test-auth";
+import { DebugPage } from "./pages/debug";
 import { Dashboard } from "./components/Dashboard";
 import "@refinedev/antd/dist/reset.css";
 
@@ -22,6 +23,10 @@ const App = () => {
         authProvider={createAuthProvider(API_URL)}
         dataProvider={createDataProvider(API_URL)}
         notificationProvider={useNotificationProvider}
+        options={{
+          syncWithLocation: true,
+          warnWhenUnsavedChanges: true,
+        }}
         resources={[
           {
             name: "devices",
@@ -71,6 +76,7 @@ const App = () => {
         <Routes>
           {/* Test auth route - accessible without authentication */}
           <Route path="/test-auth" element={<TestAuthPage />} />
+          <Route path="/debug" element={<DebugPage />} />
           
           {/* Auth routes */}
           <Route

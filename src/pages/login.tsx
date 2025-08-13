@@ -68,7 +68,7 @@ export const LoginPage = () => {
           </div>
           
           <Title level={2} style={{ margin: 0, color: '#1a1a2e', fontWeight: 'bold' }}>
-            Fleet Management
+            TrackMax
           </Title>
           <Text type="secondary" style={{ fontSize: '16px' }}>
             Faça login para acessar o sistema

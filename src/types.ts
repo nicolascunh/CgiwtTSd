@@ -1,23 +1,25 @@
+// Tipos baseados na API do Trackmax
 export type Device = {
-  id: string;
+  id: number;
   name: string;
   uniqueId: string;
   status: string;
   disabled: boolean;
   lastUpdate: string;
-  positionId: string;
-  groupId: string;
+  positionId: number;
+  groupId: number;
   phone: string;
   model: string;
   contact: string;
   category: string;
-  geofenceIds: string[];
+  geofenceIds: number[];
+  attributes: Record<string, unknown>;
 };
 
 export type Position = {
-  id: string;
+  id: number;
+  deviceId: number;
   protocol: string;
-  deviceId: string;
   deviceTime: string;
   fixTime: string;
   serverTime: string;
@@ -30,11 +32,12 @@ export type Position = {
   course: number;
   address: string;
   accuracy: number;
+  network: Record<string, unknown>;
   attributes: Record<string, unknown>;
 };
 
 export type User = {
-  id: string;
+  id: number;
   name: string;
   email: string;
   phone: string;
@@ -55,42 +58,92 @@ export type User = {
   limitCommands: boolean;
   poiLayer: string;
   token: string;
+  attributes: Record<string, unknown>;
 };
 
-export type Command = {
-  id: string;
-  deviceId: string;
-  type: string;
-  textChannel: boolean;
-  description: string;
-};
-
-export type RouteReport = {
-  id: string;
-  deviceId: string;
-  routeId: string;
-  startTime: string;
-  endTime: string;
-  duration: number;
-  distance: number;
-  averageSpeed: number;
-  maxSpeed: number;
-  status: string;
+export type Group = {
+  id: number;
+  name: string;
+  groupId: number;
+  attributes: Record<string, unknown>;
 };
 
 export type Notification = {
-  id: string;
+  id: number;
   type: string;
-  userId: string;
-  attributes: Record<string, unknown>;
-  calendarId: string;
   always: boolean;
-  notificators: string[];
+  web: boolean;
+  mail: boolean;
+  sms: boolean;
+  calendarId: number;
+  attributes: Record<string, unknown>;
 };
 
-export type Driver = {
-  id: string;
-  name: string;
-  uniqueId: string;
+export type NotificationType = {
+  type: string;
+};
+
+export type Event = {
+  id: number;
+  type: string;
+  serverTime: string;
+  deviceId: number;
+  positionId: number;
+  geofenceId: number;
+  maintenanceId: number;
   attributes: Record<string, unknown>;
+};
+
+export type ReportSummary = {
+  deviceId: number;
+  deviceName: string;
+  maxSpeed: number;
+  averageSpeed: number;
+  distance: number;
+  spentFuel: number;
+  engineHours: number;
+};
+
+export type ReportTrips = {
+  deviceId: number;
+  deviceName: string;
+  maxSpeed: number;
+  averageSpeed: number;
+  distance: number;
+  spentFuel: number;
+  duration: number;
+  startTime: string;
+  startAddress: string;
+  startLat: number;
+  startLon: number;
+  endTime: string;
+  endAddress: string;
+  endLat: number;
+  endLon: number;
+  driverUniqueId: number;
+  driverName: string;
+};
+
+export type ReportStops = {
+  deviceId: number;
+  deviceName: string;
+  duration: number;
+  startTime: string;
+  address: string;
+  lat: number;
+  lon: number;
+  endTime: string;
+  spentFuel: number;
+  engineHours: number;
+};
+
+export type Permission = {
+  userId: number;
+  deviceId: number;
+  groupId: number;
+  geofenceId: number;
+  calendarId: number;
+  attributeId: number;
+  driverId: number;
+  managedUserId: number;
 };

@@ -1,0 +1,2456 @@
+{
+	"openapi": "3.0.1",
+	"info":
+	{
+		"title": "Trackmax",
+		"version": "4.10",
+		"description": "Documentação API do servidor de rastreamento GPS Trackmax.",
+		"contact":
+		{
+			"name": "trackmax Support",
+			"url": "https://www.trackmax.com.br/",
+			"email": "support@trackmax.com.br"
+		}
+	},
+	"servers": [
+	{
+		"url": "http://sistema.trackmax.com.br/api",
+		"description": "Link servidor principal"
+	},
+	{
+		"url": "http://{host}:{port}/api",
+		"description": "Other Server",
+		"variables":
+		{
+			"host":
+			{
+				"default": "sistema.trackmax.com.br"
+			},
+			"port":
+			{
+				"enum": ["8082", "80"],
+				"default": "8082"
+			}
+		}
+	}],
+	"security": [
+	{
+		"basicAuth": []
+	}],
+	"tags": [
+	{
+		"name": "Session",
+		"description": "Gerenciamento de sessão de usuário"
+	},
+	{
+		"name": "Devices",
+		"description": "Gerenciamento de dispositivo"
+	},
+	{
+		"name": "Groups",
+		"description": "Gerenciamento de Cliente"
+	},
+	{
+		"name": "Users",
+		"description": "Gestão de usuários"
+	},
+	{
+		"name": "Permissions",
+		"description": "Permissões de usuário e outros links de objetos"
+	},
+	{
+		"name": "Positions",
+		"description": "Recuperando informações de localização brutas"
+	},
+	{
+		"name": "Events",
+		"description": "Recuperando informações do evento"
+	},
+	{
+		"name": "Reports",
+		"description": "Geração de relatórios"
+	},
+	{
+		"name": "Notifications",
+		"description": "Gerenciamento de notificações do usuário"
+	},
+	{
+		"name": "Geofences",
+		"description": "Gestão de geocerca"
+	}
+	],
+	"paths":
+	{
+		"/devices":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of Devices",
+				"description": "Without any params, returns a list of the user's devices",
+				"tags": ["Devices"],
+				"parameters": [
+				{
+					"name": "all",
+					"in": "query",
+					"description": "Can only be used by admins or managers to fetch all entities",
+					"schema":
+					{
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "userId",
+					"in": "query",
+					"description": "Standard users can use this only with their own _userId_",
+					"schema":
+					{
+						"type": "integer"
+					}
+				},
+				{
+					"name": "id",
+					"in": "query",
+					"description": "To fetch one or more devices. Multiple params can be passed like `id=31&id=42`",
+					"schema":
+					{
+						"type": "integer"
+					}
+				},
+				{
+					"name": "uniqueId",
+					"in": "query",
+					"description": "To fetch one or more devices. Multiple params can be passed like `uniqueId=333331&uniqieId=44442`",
+					"schema":
+					{
+						"type": "string"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Device"
+									}
+								}
+							}
+						}
+					},
+					"400":
+					{
+						"description": "No permission",
+						"content":
+						{}
+					}
+				}
+			},
+			"post":
+			{
+				"summary": "Create a Device",
+				"tags": ["Devices"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Device"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Device"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			}
+		},
+		"/devices/{id}":
+		{
+			"put":
+			{
+				"summary": "Update a Device",
+				"tags": ["Devices"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Device"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Device"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			},
+			"delete":
+			{
+				"summary": "Delete a Device",
+				"tags": ["Devices"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				}
+			}
+		},
+		"/devices/{id}/accumulators":
+		{
+			"put":
+			{
+				"summary": "Update total distance and hours of the Device",
+				"tags": ["Devices"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/DeviceAccumulators"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			}
+		},
+		"/groups":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of Groups",
+				"description": "Without any params, returns a list of the Groups the user belongs to",
+				"tags": ["Groups"],
+				"parameters": [
+				{
+					"name": "all",
+					"in": "query",
+					"description": "Can only be used by admins or managers to fetch all entities",
+					"schema":
+					{
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "userId",
+					"in": "query",
+					"description": "Standard users can use this only with their own _userId_",
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Group"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"post":
+			{
+				"summary": "Create a Group",
+				"tags": ["Groups"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Group"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Group"
+								}
+							}
+						}
+					},
+					"400":
+					{
+						"description": "No permission",
+						"content":
+						{}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			}
+		},
+		"/groups/{id}":
+		{
+			"put":
+			{
+				"summary": "Update a Group",
+				"tags": ["Groups"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Group"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Group"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			},
+			"delete":
+			{
+				"summary": "Delete a Group",
+				"tags": ["Groups"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				}
+			}
+		},
+		"/permissions":
+		{
+			"post":
+			{
+				"summary": "Link an Object to another Object",
+				"tags": ["Permissions"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Permission"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Permission"
+								}
+							}
+						}
+					},
+					"400":
+					{
+						"description": "No permission",
+						"content":
+						{}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			},
+			"delete":
+			{
+				"summary": "Unlink an Object from another Object",
+				"tags": ["Permissions"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Permission"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			}
+		},
+		"/positions":
+		{
+			"get":
+			{
+				"summary": "Fetches a list of Positions",
+				"description": "Recomendamos fortemente o uso de [API Trackmax WebSocket] em vez de pontos finais de sondagem periódicos de posições. Sem qualquer parâmetro, ele retorna uma lista das últimas posições conhecidas para todos os dispositivos do usuário. Os campos _from_ e _to_ não são obrigatórios com _id_.",
+				"tags": ["Positions"],
+				"parameters": [
+				{
+					"name": "deviceId",
+					"in": "query",
+					"description": "_deviceId_ is optional, but requires the _from_ and _to_ parameters when used",
+					"schema":
+					{
+						"type": "integer"
+					}
+				},
+				{
+					"name": "from",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "to",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "id",
+					"in": "query",
+					"description": "To fetch one or more positions. Multiple params can be passed like `id=31&id=42`",
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Position"
+									}
+								}
+							},
+							"text/csv":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Position"
+									}
+								}
+							},
+							"application/gpx+xml":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Position"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/session":
+		{
+			"get":
+			{
+				"summary": "Fetch Session information",
+				"tags": ["Session"],
+				"parameters": [
+				{
+					"name": "token",
+					"in": "query",
+					"schema":
+					{
+						"type": "string"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/User"
+								}
+							}
+						}
+					},
+					"404":
+					{
+						"description": "Not Found",
+						"content":
+						{}
+					}
+				}
+			},
+			"post":
+			{
+				"summary": "Create a new Session",
+				"tags": ["Session"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/x-www-form-urlencoded":
+						{
+							"schema":
+							{
+								"required": ["email", "password"],
+								"properties":
+								{
+									"email":
+									{
+										"type": "string"
+									},
+									"password":
+									{
+										"type": "string",
+										"format": "password"
+									}
+								}
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/User"
+								}
+							}
+						}
+					},
+					"401":
+					{
+						"description": "Unauthorized",
+						"content":
+						{}
+					}
+				}
+			},
+			"delete":
+			{
+				"summary": "Close the Session",
+				"tags": ["Session"],
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				}
+			}
+		},
+		"/users":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of Users",
+				"tags": ["Users"],
+				"parameters": [
+				{
+					"name": "userId",
+					"in": "query",
+					"description": "Can only be used by admin or manager users",
+					"schema":
+					{
+						"type": "string"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/User"
+									}
+								}
+							}
+						}
+					},
+					"400":
+					{
+						"description": "No Permission",
+						"content":
+						{}
+					}
+				}
+			},
+			"post":
+			{
+				"summary": "Create a User",
+				"tags": ["Users"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/User"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/User"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			}
+		},
+		"/users/{id}":
+		{
+			"put":
+			{
+				"summary": "Update a User",
+				"tags": ["Users"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/User"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/User"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			},
+			"delete":
+			{
+				"summary": "Delete a User",
+				"tags": ["Users"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				}
+			}
+		},
+		"/notifications":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of Notifications",
+				"description": "Without params, it returns a list of Notifications the user has access to",
+				"tags": ["Notifications"],
+				"parameters": [
+				{
+					"name": "all",
+					"in": "query",
+					"description": "Can only be used by admins or managers to fetch all entities",
+					"schema":
+					{
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "userId",
+					"in": "query",
+					"description": "Standard users can use this only with their own _userId_",
+					"schema":
+					{
+						"type": "integer"
+					}
+				},
+				{
+					"name": "deviceId",
+					"in": "query",
+					"description": "Standard users can use this only with _deviceId_s, they have access to",
+					"schema":
+					{
+						"type": "integer"
+					}
+				},
+				{
+					"name": "groupId",
+					"in": "query",
+					"description": "Standard users can use this only with _groupId_s, they have access to",
+					"schema":
+					{
+						"type": "integer"
+					}
+				},
+				{
+					"name": "refresh",
+					"in": "query",
+					"schema":
+					{
+						"type": "boolean"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Notification"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"post":
+			{
+				"summary": "Create a Notification",
+				"tags": ["Notifications"],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Notification"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Notification"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			}
+		},
+		"/notifications/{id}":
+		{
+			"put":
+			{
+				"summary": "Update a Notification",
+				"tags": ["Notifications"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"requestBody":
+				{
+					"content":
+					{
+						"application/json":
+						{
+							"schema":
+							{
+								"$ref": "#/components/schemas/Notification"
+							}
+						}
+					},
+					"required": true
+				},
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Notification"
+								}
+							}
+						}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			},
+			"delete":
+			{
+				"summary": "Delete a Notification",
+				"tags": ["Notifications"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"204":
+					{
+						"description": "No Content",
+						"content":
+						{}
+					}
+				}
+			}
+		},
+		"/notifications/types":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of available Notification types",
+				"tags": ["Notifications"],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/NotificationType"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/notifications/test":
+		{
+			"post":
+			{
+				"summary": "Send test notification to current user via Email and SMS",
+				"tags": ["Notifications"],
+				"responses":
+				{
+					"204":
+					{
+						"description": "Successful sending",
+						"content":
+						{}
+					},
+					"400":
+					{
+						"description": "Could happen if sending has failed",
+						"content":
+						{}
+					}
+				}
+			}
+		},
+		"/events/{id}":
+		{
+			"get":
+			{
+				"tags": ["Events"],
+				"parameters": [
+				{
+					"name": "id",
+					"in": "path",
+					"required": true,
+					"schema":
+					{
+						"type": "integer"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"$ref": "#/components/schemas/Event"
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/reports/route":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of Positions within the time period for the Devices or Groups",
+				"description": "At least one _deviceId_ or one _groupId_ must be passed",
+				"tags": ["Reports"],
+				"parameters": [
+				{
+					"name": "deviceId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "groupId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "from",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "to",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Position"
+									}
+								}
+							},
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Position"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/reports/events":
+		{
+			"get":
+			{
+				"summary": "Busque uma lista de eventos dentro do período de tempo para os dispositivos ou cliente",
+				"description": "Pelo menos um _deviceId_ ou um _groupId_ deve ser passado",
+				"tags": ["Reports"],
+				"parameters": [
+				{
+					"name": "deviceId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "groupId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "type",
+					"in": "query",
+					"description": "% pode ser usado para retornar eventos de todos os tipos",
+					"style": "form",
+					"explode": false,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "from",
+					"in": "query",
+					"description": "no formato IS0 8601. por exemplo. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "to",
+					"in": "query",
+					"description": "no formato IS0 8601. por exemplo. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Event"
+									}
+								}
+							},
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/Event"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/reports/summary":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of ReportSummary within the time period for the Devices or Groups",
+				"description": "At least one _deviceId_ or one _groupId_ must be passed",
+				"tags": ["Reports"],
+				"parameters": [
+				{
+					"name": "deviceId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "groupId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "from",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "to",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/ReportSummary"
+									}
+								}
+							},
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/ReportSummary"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/reports/trips":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of ReportTrips within the time period for the Devices or Groups",
+				"description": "At least one _deviceId_ or one _groupId_ must be passed",
+				"tags": ["Reports"],
+				"parameters": [
+				{
+					"name": "deviceId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "groupId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "from",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "to",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/ReportTrips"
+									}
+								}
+							},
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/ReportTrips"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/reports/stops":
+		{
+			"get":
+			{
+				"summary": "Fetch a list of ReportStops within the time period for the Devices or Groups",
+				"description": "At least one _deviceId_ or one _groupId_ must be passed",
+				"tags": ["Reports"],
+				"parameters": [
+				{
+					"name": "deviceId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "groupId",
+					"in": "query",
+					"style": "form",
+					"explode": true,
+					"schema":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					}
+				},
+				{
+					"name": "from",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				{
+					"name": "to",
+					"in": "query",
+					"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+					"required": true,
+					"schema":
+					{
+						"type": "string",
+						"format": "date-time"
+					}
+				}],
+				"responses":
+				{
+					"200":
+					{
+						"description": "OK",
+						"content":
+						{
+							"application/json":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/ReportStops"
+									}
+								}
+							},
+							"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+							{
+								"schema":
+								{
+									"type": "array",
+									"items":
+									{
+										"$ref": "#/components/schemas/ReportStops"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components":
+	{
+		"schemas":
+		{
+			"Position":
+			{
+				"type": "object",
+				"properties":
+				{
+					"id":
+					{
+						"type": "integer"
+					},
+					"deviceId":
+					{
+						"type": "integer"
+					},
+					"protocol":
+					{
+						"type": "string"
+					},
+					"deviceTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"fixTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"serverTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"outdated":
+					{
+						"type": "boolean"
+					},
+					"valid":
+					{
+						"type": "boolean"
+					},
+					"latitude":
+					{
+						"type": "number"
+					},
+					"longitude":
+					{
+						"type": "number"
+					},
+					"altitude":
+					{
+						"type": "number"
+					},
+					"speed":
+					{
+						"type": "number",
+						"description": "in knots"
+					},
+					"course":
+					{
+						"type": "number"
+					},
+					"address":
+					{
+						"type": "string"
+					},
+					"accuracy":
+					{
+						"type": "number"
+					},
+					"network":
+					{
+						"type": "object",
+						"properties":
+						{}
+					},
+					"attributes":
+					{
+						"type": "object",
+						"properties":
+						{}
+					}
+				}
+			},
+			"User":
+			{
+				"type": "object",
+				"properties":
+				{
+					"id":
+					{
+						"type": "integer"
+					},
+					"name":
+					{
+						"type": "string"
+					},
+					"email":
+					{
+						"type": "string"
+					},
+					"phone":
+					{
+						"type": "string"
+					},
+					"readonly":
+					{
+						"type": "boolean"
+					},
+					"administrator":
+					{
+						"type": "boolean"
+					},
+					"map":
+					{
+						"type": "string"
+					},
+					"latitude":
+					{
+						"type": "number"
+					},
+					"longitude":
+					{
+						"type": "number"
+					},
+					"zoom":
+					{
+						"type": "integer"
+					},
+					"password":
+					{
+						"type": "string"
+					},
+					"twelveHourFormat":
+					{
+						"type": "boolean"
+					},
+					"coordinateFormat":
+					{
+						"type": "string"
+					},
+					"disabled":
+					{
+						"type": "boolean"
+					},
+					"expirationTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"deviceLimit":
+					{
+						"type": "integer"
+					},
+					"userLimit":
+					{
+						"type": "integer"
+					},
+					"deviceReadonly":
+					{
+						"type": "boolean"
+					},
+					"limitCommands":
+					{
+						"type": "boolean"
+					},
+					"poiLayer":
+					{
+						"type": "string"
+					},
+					"token":
+					{
+						"type": "string"
+					},
+					"attributes":
+					{
+						"type": "object",
+						"properties":
+						{}
+					}
+				}
+			},
+			"Device":
+			{
+				"type": "object",
+				"properties":
+				{
+					"id":
+					{
+						"type": "integer"
+					},
+					"name":
+					{
+						"type": "string"
+					},
+					"uniqueId":
+					{
+						"type": "string"
+					},
+					"status":
+					{
+						"type": "string"
+					},
+					"disabled":
+					{
+						"type": "boolean"
+					},
+					"lastUpdate":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"positionId":
+					{
+						"type": "integer"
+					},
+					"groupId":
+					{
+						"type": "integer"
+					},
+					"phone":
+					{
+						"type": "string"
+					},
+					"model":
+					{
+						"type": "string"
+					},
+					"contact":
+					{
+						"type": "string"
+					},
+					"category":
+					{
+						"type": "string"
+					},
+					"geofenceIds":
+					{
+						"type": "array",
+						"items":
+						{
+							"type": "integer"
+						}
+					},
+					"attributes":
+					{
+						"type": "object",
+						"properties":
+						{}
+					}
+				}
+			},
+			"Group":
+			{
+				"type": "object",
+				"properties":
+				{
+					"id":
+					{
+						"type": "integer"
+					},
+					"name":
+					{
+						"type": "string"
+					},
+					"groupId":
+					{
+						"type": "integer"
+					},
+					"attributes":
+					{
+						"type": "object",
+						"properties":
+						{}
+					}
+				}
+			},
+			"Permission":
+			{
+				"type": "object",
+				"properties":
+				{
+					"userId":
+					{
+						"type": "integer",
+						"description": "User Id, can be only first parameter"
+					},
+					"deviceId":
+					{
+						"type": "integer",
+						"description": "Device Id, can be first parameter or second only in combination with userId"
+					},
+					"groupId":
+					{
+						"type": "integer",
+						"description": "Group Id, can be first parameter or second only in combination with userId"
+					},
+					"geofenceId":
+					{
+						"type": "integer",
+						"description": "Geofence Id, can be second parameter only"
+					},
+					"calendarId":
+					{
+						"type": "integer",
+						"description": "Calendar Id, can be second parameter only and only in combination with userId"
+					},
+					"attributeId":
+					{
+						"type": "integer",
+						"description": "Computed Attribute Id, can be second parameter only"
+					},
+					"driverId":
+					{
+						"type": "integer",
+						"description": "Driver Id, can be second parameter only"
+					},
+					"managedUserId":
+					{
+						"type": "integer",
+						"description": "User Id, can be second parameter only and only in combination with userId"
+					}
+				},
+				"description": "This is a permission map that contain two object indexes. It is used to link/unlink objects. Order is important. Example: { deviceId:8, geofenceId: 16 }"
+			},
+			"Notification":
+			{
+				"type": "object",
+				"properties":
+				{
+					"id":
+					{
+						"type": "integer"
+					},
+					"type":
+					{
+						"type": "string"
+					},
+					"always":
+					{
+						"type": "boolean"
+					},
+					"web":
+					{
+						"type": "boolean"
+					},
+					"mail":
+					{
+						"type": "boolean"
+					},
+					"sms":
+					{
+						"type": "boolean"
+					},
+					"calendarId":
+					{
+						"type": "integer"
+					},
+					"attributes":
+					{
+						"type": "object",
+						"properties":
+						{}
+					}
+				}
+			},
+			"NotificationType":
+			{
+				"type": "object",
+				"properties":
+				{
+					"type":
+					{
+						"type": "string"
+					}
+				}
+			},
+			"Event":
+			{
+				"type": "object",
+				"properties":
+				{
+					"id":
+					{
+						"type": "integer"
+					},
+					"type":
+					{
+						"type": "string"
+					},
+					"serverTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"deviceId":
+					{
+						"type": "integer"
+					},
+					"positionId":
+					{
+						"type": "integer"
+					},
+					"geofenceId":
+					{
+						"type": "integer"
+					},
+					"maintenanceId":
+					{
+						"type": "integer"
+					},
+					"attributes":
+					{
+						"type": "object",
+						"properties":
+						{}
+					}
+				}
+			},
+			"ReportSummary":
+			{
+				"type": "object",
+				"properties":
+				{
+					"deviceId":
+					{
+						"type": "integer"
+					},
+					"deviceName":
+					{
+						"type": "string"
+					},
+					"maxSpeed":
+					{
+						"type": "number",
+						"description": "in knots"
+					},
+					"averageSpeed":
+					{
+						"type": "number",
+						"description": "in knots"
+					},
+					"distance":
+					{
+						"type": "number",
+						"description": "in meters"
+					},
+					"spentFuel":
+					{
+						"type": "number",
+						"description": "in liters"
+					},
+					"engineHours":
+					{
+						"type": "integer"
+					}
+				}
+			},
+			"ReportTrips":
+			{
+				"type": "object",
+				"properties":
+				{
+					"deviceId":
+					{
+						"type": "integer"
+					},
+					"deviceName":
+					{
+						"type": "string"
+					},
+					"maxSpeed":
+					{
+						"type": "number",
+						"description": "in knots"
+					},
+					"averageSpeed":
+					{
+						"type": "number",
+						"description": "in knots"
+					},
+					"distance":
+					{
+						"type": "number",
+						"description": "in meters"
+					},
+					"spentFuel":
+					{
+						"type": "number",
+						"description": "in liters"
+					},
+					"duration":
+					{
+						"type": "integer"
+					},
+					"startTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"startAddress":
+					{
+						"type": "string"
+					},
+					"startLat":
+					{
+						"type": "number"
+					},
+					"startLon":
+					{
+						"type": "number"
+					},
+					"endTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"endAddress":
+					{
+						"type": "string"
+					},
+					"endLat":
+					{
+						"type": "number"
+					},
+					"endLon":
+					{
+						"type": "number"
+					},
+					"driverUniqueId":
+					{
+						"type": "integer"
+					},
+					"driverName":
+					{
+						"type": "string"
+					}
+				}
+			},
+			"ReportStops":
+			{
+				"type": "object",
+				"properties":
+				{
+					"deviceId":
+					{
+						"type": "integer"
+					},
+					"deviceName":
+					{
+						"type": "string"
+					},
+					"duration":
+					{
+						"type": "integer"
+					},
+					"startTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"address":
+					{
+						"type": "string"
+					},
+					"lat":
+					{
+						"type": "number"
+					},
+					"lon":
+					{
+						"type": "number"
+					},
+					"endTime":
+					{
+						"type": "string",
+						"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+						"format": "date-time"
+					},
+					"spentFuel":
+					{
+						"type": "number",
+						"description": "in liters"
+					},
+					"engineHours":
+					{
+						"type": "integer"
+					}
+				}
+			}
+		},
+		"parameters":
+		{
+			"entityId":
+			{
+				"name": "id",
+				"in": "path",
+				"required": true,
+				"schema":
+				{
+					"type": "integer"
+				}
+			},
+			"all":
+			{
+				"name": "all",
+				"in": "query",
+				"description": "Can only be used by admins or managers to fetch all entities",
+				"schema":
+				{
+					"type": "boolean"
+				}
+			},
+			"refresh":
+			{
+				"name": "refresh",
+				"in": "query",
+				"schema":
+				{
+					"type": "boolean"
+				}
+			},
+			"userId":
+			{
+				"name": "userId",
+				"in": "query",
+				"description": "Standard users can use this only with their own _userId_",
+				"schema":
+				{
+					"type": "integer"
+				}
+			},
+			"deviceId":
+			{
+				"name": "deviceId",
+				"in": "query",
+				"description": "Standard users can use this only with _deviceId_s, they have access to",
+				"schema":
+				{
+					"type": "integer"
+				}
+			},
+			"groupId":
+			{
+				"name": "groupId",
+				"in": "query",
+				"description": "Standard users can use this only with _groupId_s, they have access to",
+				"schema":
+				{
+					"type": "integer"
+				}
+			},
+			"deviceIdArray":
+			{
+				"name": "deviceId",
+				"in": "query",
+				"style": "form",
+				"explode": true,
+				"schema":
+				{
+					"type": "array",
+					"items":
+					{
+						"type": "integer"
+					}
+				}
+			},
+			"groupIdArray":
+			{
+				"name": "groupId",
+				"in": "query",
+				"style": "form",
+				"explode": true,
+				"schema":
+				{
+					"type": "array",
+					"items":
+					{
+						"type": "integer"
+					}
+				}
+			},
+			"fromTime":
+			{
+				"name": "from",
+				"in": "query",
+				"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+				"required": true,
+				"schema":
+				{
+					"type": "string",
+					"format": "date-time"
+				}
+			},
+			"toTime":
+			{
+				"name": "to",
+				"in": "query",
+				"description": "in IS0 8601 format. eg. `1963-11-22T18:30:00Z`",
+				"required": true,
+				"schema":
+				{
+					"type": "string",
+					"format": "date-time"
+				}
+			}
+		},
+		"requestBodies":
+		{
+			"Device":
+			{
+				"content":
+				{
+					"application/json":
+					{
+						"schema":
+						{
+							"$ref": "#/components/schemas/Device"
+						}
+					}
+				},
+				"required": true
+			},
+			"Permission":
+			{
+				"content":
+				{
+					"application/json":
+					{
+						"schema":
+						{
+							"$ref": "#/components/schemas/Permission"
+						}
+					}
+				},
+				"required": true
+			},
+			"Group":
+			{
+				"content":
+				{
+					"application/json":
+					{
+						"schema":
+						{
+							"$ref": "#/components/schemas/Group"
+						}
+					}
+				},
+				"required": true
+			},
+			"User":
+			{
+				"content":
+				{
+					"application/json":
+					{
+						"schema":
+						{
+							"$ref": "#/components/schemas/User"
+						}
+					}
+				},
+				"required": true
+			},
+			"Notification":
+			{
+				"content":
+				{
+					"application/json":
+					{
+						"schema":
+						{
+							"$ref": "#/components/schemas/Notification"
+						}
+					}
+				},
+				"required": true
+			}
+		},
+		"securitySchemes":
+		{
+			"basicAuth":
+			{
+				"type": "http",
+				"description": "Basic HTTP authorization with _email_ and _password_",
+				"scheme": "basic"
+			}
+		}
+	}
+}

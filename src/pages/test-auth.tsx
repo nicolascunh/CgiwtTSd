@@ -1,51 +1,32 @@
 import React, { useState } from 'react';
 import { Card, Button, Input, Form, message, Typography, Divider } from 'antd';
 import { UserOutlined, LockOutlined, CarOutlined } from '@ant-design/icons';
+import { useLogin } from '@refinedev/core';
 
 const { Title, Text } = Typography;
 
 export const TestAuthPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const { mutate: login } = useLogin();
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
     
     try {
-      const credentials = btoa(`${values.username}:${values.password}`);
+      console.log('Attempting login with:', values.username);
       
-      const response = await fetch('http://35.230.168.225:8082/api/session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${credentials}`
-        },
-      });
-
-      if (response.ok) {
-        message.success('Login realizado com sucesso!');
-        // Salvar credenciais
-        localStorage.setItem('auth-credentials', credentials);
-        localStorage.setItem('auth-user', values.username);
-        
-        // Redirecionar para dashboard
-        window.location.href = '/';
-      } else {
-        let errorMessage = 'Falha no login';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
-          if (response.status === 401) {
-            errorMessage = 'Usuário ou senha inválidos';
-          } else if (response.status === 403) {
-            errorMessage = 'Acesso negado';
-          }
-        }
-        message.error(errorMessage);
-      }
-    } catch (error) {
-      message.error('Erro de conexão. Verifique sua internet.');
+      // Usar o hook do Refine para login
+      await login(values);
+      
+      console.log('Login successful via Refine hook');
+      message.success('Login realizado com sucesso!');
+      
+      // O redirecionamento será feito automaticamente pelo Refine
+      
+    } catch (error: any) {
+      console.log('Login error:', error);
+      message.error(error?.message || 'Erro ao fazer login');
     } finally {
       setLoading(false);
     }
