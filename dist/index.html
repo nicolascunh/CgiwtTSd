@@ -12,8 +12,22 @@
     -->
   <link rel="manifest" href="/manifest.json" />
   <title>TrackMax</title>
-  <script type="module" crossorigin src="/assets/index-DTUqyaeA.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-byGIYA10.css">
+  
+  <!-- Google Maps API -->
+  <script async defer 
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCVF12ojdhyhYoWiNWkoxXGsxBdajMufqA&libraries=places,geometry&callback=initGoogleMaps">
+  </script>
+  <script>
+    function initGoogleMaps() {
+      console.log('🎉 Google Maps API carregada com sucesso!');
+      window.googleMapsLoaded = true;
+    }
+  </script>
+  <script type="module" crossorigin src="/assets/index-D8u95GJz-v2.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-CC_ZIGTP-v2.js">
+  <link rel="modulepreload" crossorigin href="/assets/antd-Cxr9poXl-v2.js">
+  <link rel="modulepreload" crossorigin href="/assets/maps-Dl9_CbcP-v2.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-y41N4Xig-v2.css">
 </head>
 
 <body>

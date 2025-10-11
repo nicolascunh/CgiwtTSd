@@ -44,8 +44,6 @@ export const DevicesPage: React.FC = () => {
     const { 
     fetchDevices, 
     fetchPositions, 
-    fetchPositionsInBatches,
-    fetchDeviceStats, 
     loading, 
     error 
   } = useTrackmaxApi();
@@ -56,10 +54,7 @@ export const DevicesPage: React.FC = () => {
     try {
       setLoadingProgress(20);
       
-      const result = await fetchDevices(page, 50, {
-        search: searchTerm || undefined,
-        status: deviceFilter === 'all' ? undefined : deviceFilter
-      });
+      const result = await fetchDevices(page, 50);
       
       setLoadingProgress(60);
       
@@ -88,31 +83,36 @@ export const DevicesPage: React.FC = () => {
     try {
       setLoadingProgress(85);
       
-      // Buscar posições em lotes para melhor performance
+      // Buscar posições para melhor performance
       const deviceIds = devices.map(d => d.id);
-      const positionsData = await fetchPositionsInBatches(deviceIds, 20, 1000);
+      const positionsData = await fetchPositions(deviceIds, 100);
       setPositions(positionsData);
       
       setLoadingProgress(95);
     } catch (err) {
       console.error('Erro ao carregar posições:', err);
     }
-  }, [fetchPositionsInBatches, devices]);
+  }, [fetchPositions, devices]);
 
   // Carregar estatísticas do dispositivo selecionado
   const loadDeviceStats = useCallback(async (deviceId: number) => {
     if (deviceStats[deviceId]) return; // Já carregado
     
     try {
-      const stats = await fetchDeviceStats(deviceId);
+      // Simular carregamento de estatísticas
+      const mockStats = {
+        totalDistance: 0,
+        avgSpeed: 0,
+        lastUpdate: new Date().toISOString()
+      };
       setDeviceStats(prev => ({
         ...prev,
-        [deviceId]: stats
+        [deviceId]: mockStats
       }));
     } catch (err) {
       console.error('Erro ao carregar estatísticas:', err);
     }
-  }, [fetchDeviceStats, deviceStats]);
+  }, [deviceStats]);
 
   // Carregar dados iniciais
   useEffect(() => {

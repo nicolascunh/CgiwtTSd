@@ -143,7 +143,7 @@ export const LoginPage = () => {
 
         <div style={{ textAlign: 'center' }}>
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            API: http://35.230.168.225:8082
+            API: /api
           </Text>
         </div>
       </div>

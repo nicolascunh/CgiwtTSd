@@ -87,6 +87,7 @@ const translations = {
     // Common
     no_location_data: 'Sem dados de localização',
     select_device_details: 'Selecione um dispositivo para ver os detalhes',
+    version: 'Versão',
     
     // Performance
     performance: 'Performance',
@@ -95,8 +96,34 @@ const translations = {
     auto_optimization: 'Otimização Automática',
     performance_settings: 'Configure o monitoramento e otimização de performance',
     
+    // Settings
+    notifications_settings: 'Configurações de Notificações',
+    configure_alerts: 'Configure alertas e notificações',
+    email_notifications: 'Notificações por Email',
+    push_notifications: 'Notificações Push',
+    device_alerts: 'Alertas de Dispositivos',
+    security: 'Segurança',
+    account_security: 'Segurança da conta',
+    two_factor_auth: 'Autenticação de Dois Fatores',
+    active_sessions: 'Sessões Ativas',
+    view_sessions: 'Ver Sessões',
+    preferences: 'Preferências',
+    general_settings: 'Configurações gerais',
+    language: 'Idioma',
+    toggle_theme: 'Alterar tema',
+    switch_to_dark: 'Ativar modo escuro',
+    switch_to_light: 'Ativar modo claro',
+    theme_mode: 'Modo de tema',
+    theme_light: 'Claro',
+    theme_dark: 'Escuro',
+    current_user_unknown: 'Usuário não identificado',
+    current_user: 'Usuário Atual',
+    manage_personal_info: 'Gerencie suas informações pessoais',
+    edit_profile: 'Editar Perfil',
+    logout_system: 'Sair do Sistema',
+    end_current_session: 'Encerrar sessão atual',
+    
     // Dashboard
-    live_camera: 'Câmera ao Vivo',
     view_mode: 'Modo de Visualização',
     grid_view: 'Visualização em Grade',
     list_view: 'Visualização em Lista',
@@ -179,6 +206,7 @@ const translations = {
     // Common
     no_location_data: 'No location data',
     select_device_details: 'Select a device to see details',
+    version: 'Version',
     
     // Performance
     performance: 'Performance',
@@ -187,8 +215,34 @@ const translations = {
     auto_optimization: 'Auto Optimization',
     performance_settings: 'Configure performance monitoring and optimization',
     
+    // Settings
+    notifications_settings: 'Notification Settings',
+    configure_alerts: 'Configure alerts and notifications',
+    email_notifications: 'Email Notifications',
+    push_notifications: 'Push Notifications',
+    device_alerts: 'Device Alerts',
+    security: 'Security',
+    account_security: 'Account security',
+    two_factor_auth: 'Two-Factor Authentication',
+    active_sessions: 'Active Sessions',
+    view_sessions: 'View Sessions',
+    preferences: 'Preferences',
+    general_settings: 'General settings',
+    language: 'Language',
+    toggle_theme: 'Change theme',
+    switch_to_dark: 'Enable dark mode',
+    switch_to_light: 'Enable light mode',
+    theme_mode: 'Theme mode',
+    theme_light: 'Light',
+    theme_dark: 'Dark',
+    current_user_unknown: 'Unknown user',
+    current_user: 'Current User',
+    manage_personal_info: 'Manage your personal information',
+    edit_profile: 'Edit Profile',
+    logout_system: 'Logout System',
+    end_current_session: 'End current session',
+    
     // Dashboard
-    live_camera: 'Live Camera',
     view_mode: 'View Mode',
     grid_view: 'Grid View',
     list_view: 'List View',
@@ -271,6 +325,7 @@ const translations = {
     // Common
     no_location_data: 'Sin datos de ubicación',
     select_device_details: 'Selecciona un dispositivo para ver detalles',
+    version: 'Versión',
     
     // Performance
     performance: 'Rendimiento',
@@ -279,8 +334,34 @@ const translations = {
     auto_optimization: 'Optimización Automática',
     performance_settings: 'Configure el monitoreo y optimización de rendimiento',
     
+    // Settings
+    notifications_settings: 'Configuración de Notificaciones',
+    configure_alerts: 'Configurar alertas y notificaciones',
+    email_notifications: 'Notificaciones por Email',
+    push_notifications: 'Notificaciones Push',
+    device_alerts: 'Alertas de Dispositivos',
+    security: 'Seguridad',
+    account_security: 'Seguridad de la cuenta',
+    two_factor_auth: 'Autenticación de Dos Factores',
+    active_sessions: 'Sesiones Activas',
+    view_sessions: 'Ver Sesiones',
+    preferences: 'Preferencias',
+    general_settings: 'Configuración general',
+    language: 'Idioma',
+    toggle_theme: 'Cambiar tema',
+    switch_to_dark: 'Activar modo oscuro',
+    switch_to_light: 'Activar modo claro',
+    theme_mode: 'Modo de tema',
+    theme_light: 'Claro',
+    theme_dark: 'Oscuro',
+    current_user_unknown: 'Usuario no identificado',
+    current_user: 'Usuario Actual',
+    manage_personal_info: 'Gestiona tu información personal',
+    edit_profile: 'Editar Perfil',
+    logout_system: 'Cerrar Sistema',
+    end_current_session: 'Finalizar sesión actual',
+    
     // Dashboard
-    live_camera: 'Cámara en Vivo',
     view_mode: 'Modo de Vista',
     grid_view: 'Vista de Cuadrícula',
     list_view: 'Vista de Lista',

@@ -7,6 +7,11 @@
     "dev": "refine dev",
     "start": "refine start",
     "build": "tsc && refine build",
+    "build:firebase": "tsc && refine build && npm run copy-manifest",
+    "copy-manifest": "cp public/manifest.json dist/",
+    "deploy": "npm run build:firebase && firebase deploy",
+    "deploy:hosting": "npm run build:firebase && firebase deploy --only hosting",
+    "firebase:init": "firebase init hosting",
     "refine": "refine"
   },
   "browserslist": {
@@ -33,6 +38,7 @@
     "@uiw/react-md-editor": "latest",
     "antd": "^5.17.0",
     "dayjs": "^1.11.11",
+    "firebase": "^12.4.0",
     "leaflet": "^1.9.4",
     "query-string": "^7.1.1",
     "react": "^18.0.0",

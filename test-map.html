@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Google Maps</title>
+    <script async defer 
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCVF12ojdhyhYoWiNWkoxXGsxBdajMufqA&libraries=places,geometry&callback=initMap">
+    </script>
+</head>
+<body>
+    <div id="map" style="height: 500px; width: 100%;"></div>
+    
+    <script>
+        function initMap() {
+            console.log('Google Maps carregado!');
+            
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 10,
+                center: { lat: -23.5505, lng: -46.6333 },
+            });
+            
+            // Adicionar marcadores de teste
+            const markers = [
+                { lat: -23.5505, lng: -46.6333, title: "Veículo 1" },
+                { lat: -23.5605, lng: -46.6433, title: "Veículo 2" },
+                { lat: -23.5405, lng: -46.6233, title: "Veículo 3" }
+            ];
+            
+            markers.forEach((markerData, index) => {
+                const marker = new google.maps.Marker({
+                    position: { lat: markerData.lat, lng: markerData.lng },
+                    map: map,
+                    title: markerData.title,
+                    label: `${index + 1}`
+                });
+                console.log(`Marcador ${index + 1} criado:`, markerData);
+            });
+            
+            console.log('Mapa e marcadores criados com sucesso!');
+        }
+        
+        // Verificar se Google Maps carregou
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                if (typeof google === 'undefined') {
+                    console.error('❌ Google Maps não carregou!');
+                    document.body.innerHTML = '<h1>Erro: Google Maps não carregou</h1>';
+                } else {
+                    console.log('✅ Google Maps disponível');
+                }
+            }, 3000);
+        });
+    </script>
+</body>
+</html>
+
+
+
+

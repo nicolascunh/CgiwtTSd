@@ -1,0 +1,15 @@
+0 verbose cli /Users/nicolascunha/.nvm/versions/node/v18.20.4/bin/node /Users/nicolascunha/.nvm/versions/node/v18.20.4/bin/npm
+1 info using npm@10.7.0
+2 info using node@v18.20.4
+3 silly config:load:file:/Users/nicolascunha/.nvm/versions/node/v18.20.4/lib/node_modules/npm/npmrc
+4 silly config:load:file:/Users/nicolascunha/Downloads/CgiwtTSd/.npmrc
+5 silly config:load:file:/Users/nicolascunha/.nvm/versions/node/v18.20.4/etc/npmrc
+6 verbose title npm ls
+7 verbose argv "ls" "--depth" "0" "--json"
+8 verbose logfile logs-max:10 dir:/Users/nicolascunha/Downloads/CgiwtTSd/.npm/_logs/2025-10-10T00_03_27_306Z-
+9 verbose logfile /Users/nicolascunha/Downloads/CgiwtTSd/.npm/_logs/2025-10-10T00_03_27_306Z-debug-0.log
+10 silly logfile start cleaning logs, removing 1 files
+11 silly logfile done cleaning log files
+12 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules
+13 verbose exit 0
+14 info ok

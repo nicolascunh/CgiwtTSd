@@ -11,7 +11,7 @@ import {
   DashboardOutlined,
   MonitorOutlined
 } from '@ant-design/icons';
-import { useLogout } from '@refinedev/core';
+import { useLogout, useGetIdentity } from '@refinedev/core';
 import { useLanguage, Language } from '../contexts/LanguageContext';
 import { useTheme, Theme } from '../contexts/ThemeContext';
 
@@ -20,6 +20,7 @@ const { Option } = Select;
 
 export const SettingsPage: React.FC = () => {
   const { mutate: logout } = useLogout();
+  const { data: identity } = useGetIdentity<{ id: string; name?: string; username?: string }>();
   const { language, setLanguage, t } = useLanguage();
   const { theme, setTheme, toggleTheme } = useTheme();
   
@@ -125,15 +126,27 @@ export const SettingsPage: React.FC = () => {
       icon: <BulbOutlined />,
       actions: [
         {
-          label: 'Modo Escuro',
+          label: t('toggle_theme'),
+          component: (
+            <Button 
+              size="small" 
+              icon={<BulbOutlined />} 
+              onClick={toggleTheme}
+            >
+              {theme === 'light' ? t('switch_to_dark') : t('switch_to_light')}
+            </Button>
+          )
+        },
+        {
+          label: t('theme_mode'),
           component: (
             <Radio.Group 
               value={theme} 
               onChange={(e) => setTheme(e.target.value)}
               size="small"
             >
-              <Radio.Button value="light">Claro</Radio.Button>
-              <Radio.Button value="dark">Escuro</Radio.Button>
+              <Radio.Button value="light">{t('theme_light')}</Radio.Button>
+              <Radio.Button value="dark">{t('theme_dark')}</Radio.Button>
             </Radio.Group>
           )
         }
@@ -191,7 +204,9 @@ export const SettingsPage: React.FC = () => {
             <Avatar size={64} icon={<UserOutlined />} />
           </Col>
           <Col flex="1">
-            <Title level={4} style={{ margin: 0 }}>{t('current_user')}</Title>
+            <Title level={4} style={{ margin: 0 }}>
+              {identity?.name || identity?.username || t('current_user_unknown')}
+            </Title>
             <Text type="secondary">{t('manage_personal_info')}</Text>
           </Col>
           <Col>

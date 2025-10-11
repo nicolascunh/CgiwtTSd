@@ -1,0 +1,40 @@
+0 verbose cli /Users/nicolascunha/.nvm/versions/node/v18.20.4/bin/node /Users/nicolascunha/.nvm/versions/node/v18.20.4/bin/npm
+1 info using npm@10.7.0
+2 info using node@v18.20.4
+3 silly config:load:file:/Users/nicolascunha/.nvm/versions/node/v18.20.4/lib/node_modules/npm/npmrc
+4 silly config:load:file:/Users/nicolascunha/Downloads/CgiwtTSd/.npmrc
+5 silly config:load:file:/Users/nicolascunha/.nvm/versions/node/v18.20.4/etc/npmrc
+6 verbose title npm outdated
+7 verbose argv "outdated" "--json"
+8 verbose logfile logs-max:10 dir:/Users/nicolascunha/Downloads/CgiwtTSd/.npm/_logs/2025-10-10T00_18_31_973Z-
+9 verbose logfile /Users/nicolascunha/Downloads/CgiwtTSd/.npm/_logs/2025-10-10T00_18_31_973Z-debug-0.log
+10 silly logfile start cleaning logs, removing 1 files
+11 silly logfile done cleaning log files
+12 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules
+13 http fetch GET 200 https://registry.npmjs.org/dayjs 211ms (cache revalidated)
+14 http fetch GET 200 https://registry.npmjs.org/react-router 212ms (cache revalidated)
+15 http fetch GET 200 https://registry.npmjs.org/firebase 226ms (cache revalidated)
+16 http fetch GET 200 https://registry.npmjs.org/@types%2fleaflet 258ms (cache revalidated)
+17 http fetch GET 200 https://registry.npmjs.org/leaflet 265ms (cache revalidated)
+18 http fetch GET 200 https://registry.npmjs.org/react-leaflet 266ms (cache revalidated)
+19 http fetch GET 200 https://registry.npmjs.org/query-string 269ms (cache revalidated)
+20 http fetch GET 200 https://registry.npmjs.org/react 272ms (cache revalidated)
+21 http fetch GET 200 https://registry.npmjs.org/@vitejs%2fplugin-react 292ms (cache revalidated)
+22 http fetch GET 200 https://registry.npmjs.org/@types%2freact 293ms (cache revalidated)
+23 http fetch GET 200 https://registry.npmjs.org/react-dom 299ms (cache revalidated)
+24 http fetch GET 200 https://registry.npmjs.org/@types%2freact-dom 315ms (cache revalidated)
+25 http fetch GET 200 https://registry.npmjs.org/typescript 326ms (cache revalidated)
+26 http fetch GET 200 https://registry.npmjs.org/@refinedev%2fsimple-rest 354ms (cache revalidated)
+27 http fetch GET 200 https://registry.npmjs.org/@types%2fnode 354ms (cache revalidated)
+28 http fetch GET 200 https://registry.npmjs.org/vite 360ms (cache revalidated)
+29 http fetch GET 200 https://registry.npmjs.org/@refinedev%2fantd 380ms (cache revalidated)
+30 http fetch GET 200 https://registry.npmjs.org/vite-tsconfig-paths 384ms (cache revalidated)
+31 http fetch GET 200 https://registry.npmjs.org/@ant-design%2ficons 390ms (cache revalidated)
+32 http fetch GET 200 https://registry.npmjs.org/@uiw%2freact-md-editor 408ms (cache revalidated)
+33 http fetch GET 200 https://registry.npmjs.org/@refinedev%2fgraphql 413ms (cache revalidated)
+34 http fetch GET 200 https://registry.npmjs.org/antd 459ms (cache revalidated)
+35 http fetch GET 200 https://registry.npmjs.org/@refinedev%2fcore 989ms (cache revalidated)
+36 http fetch GET 200 https://registry.npmjs.org/@refinedev%2fcli 1066ms (cache revalidated)
+37 http fetch GET 200 https://registry.npmjs.org/@refinedev%2freact-router 1116ms (cache revalidated)
+38 verbose exit 1
+39 verbose code 1

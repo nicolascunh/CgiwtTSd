@@ -1,0 +1,264 @@
+/* Tema escuro para o dashboard de rastreamento */
+
+.dark-theme {
+  background: #1f1f1f;
+  color: #fff;
+}
+
+.dark-theme .ant-layout {
+  background: #1f1f1f;
+}
+
+.dark-theme .ant-layout-header {
+  background: #1f1f1f;
+  border-bottom: 1px solid #303030;
+}
+
+.dark-theme .ant-layout-sider {
+  background: #1f1f1f;
+  border-right: 1px solid #303030;
+}
+
+.dark-theme .ant-layout-content {
+  background: #1f1f1f;
+}
+
+/* Cards */
+.dark-theme .ant-card {
+  background: #1f1f1f;
+  border: 1px solid #303030;
+}
+
+.dark-theme .ant-card-head {
+  background: #1f1f1f;
+  border-bottom: 1px solid #303030;
+}
+
+.dark-theme .ant-card-head-title {
+  color: #fff;
+}
+
+.dark-theme .ant-card-body {
+  background: #1f1f1f;
+}
+
+/* Tabs */
+.dark-theme .ant-tabs {
+  color: #fff;
+}
+
+.dark-theme .ant-tabs-tab {
+  color: #8c8c8c;
+}
+
+.dark-theme .ant-tabs-tab-active {
+  color: #1890ff;
+}
+
+.dark-theme .ant-tabs-tab:hover {
+  color: #1890ff;
+}
+
+.dark-theme .ant-tabs-content-holder {
+  background: #1f1f1f;
+}
+
+.dark-theme .ant-tabs-tabpane {
+  background: #1f1f1f;
+}
+
+/* Buttons */
+.dark-theme .ant-btn {
+  background: #262626;
+  border-color: #434343;
+  color: #fff;
+}
+
+.dark-theme .ant-btn:hover {
+  background: #434343;
+  border-color: #595959;
+  color: #fff;
+}
+
+.dark-theme .ant-btn-primary {
+  background: #1890ff;
+  border-color: #1890ff;
+}
+
+.dark-theme .ant-btn-primary:hover {
+  background: #40a9ff;
+  border-color: #40a9ff;
+}
+
+/* Typography */
+.dark-theme .ant-typography {
+  color: #fff;
+}
+
+.dark-theme .ant-typography-caption {
+  color: #8c8c8c;
+}
+
+.dark-theme .ant-typography-secondary {
+  color: #8c8c8c;
+}
+
+/* Timeline */
+.dark-theme .ant-timeline-item-content {
+  color: #fff;
+}
+
+.dark-theme .ant-timeline-item-head {
+  background: #1f1f1f;
+  border-color: #434343;
+}
+
+/* Statistics */
+.dark-theme .ant-statistic-title {
+  color: #8c8c8c;
+}
+
+.dark-theme .ant-statistic-content {
+  color: #fff;
+}
+
+/* Descriptions */
+.dark-theme .ant-descriptions-item-label {
+  color: #8c8c8c;
+}
+
+.dark-theme .ant-descriptions-item-content {
+  color: #fff;
+}
+
+.dark-theme .ant-descriptions-bordered .ant-descriptions-item {
+  border-color: #303030;
+}
+
+/* Modal */
+.dark-theme .ant-modal-content {
+  background: #1f1f1f;
+}
+
+.dark-theme .ant-modal-header {
+  background: #1f1f1f;
+  border-bottom: 1px solid #303030;
+}
+
+.dark-theme .ant-modal-title {
+  color: #fff;
+}
+
+.dark-theme .ant-modal-body {
+  background: #1f1f1f;
+  color: #fff;
+}
+
+.dark-theme .ant-modal-footer {
+  background: #1f1f1f;
+  border-top: 1px solid #303030;
+}
+
+/* Tags */
+.dark-theme .ant-tag {
+  background: #262626;
+  border-color: #434343;
+  color: #fff;
+}
+
+.dark-theme .ant-tag-success {
+  background: #162312;
+  border-color: #389e0d;
+  color: #52c41a;
+}
+
+.dark-theme .ant-tag-error {
+  background: #2a1215;
+  border-color: #cf1322;
+  color: #ff4d4f;
+}
+
+.dark-theme .ant-tag-warning {
+  background: #2b2111;
+  border-color: #d48806;
+  color: #faad14;
+}
+
+/* Space */
+.dark-theme .ant-space-item {
+  color: #fff;
+}
+
+/* Avatar */
+.dark-theme .ant-avatar {
+  background: #434343;
+  color: #fff;
+}
+
+/* Divider */
+.dark-theme .ant-divider {
+  border-color: #303030;
+}
+
+/* Scrollbar personalizada */
+.dark-theme ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dark-theme ::-webkit-scrollbar-track {
+  background: #1f1f1f;
+}
+
+.dark-theme ::-webkit-scrollbar-thumb {
+  background: #434343;
+  border-radius: 3px;
+}
+
+.dark-theme ::-webkit-scrollbar-thumb:hover {
+  background: #595959;
+}
+
+/* Efeitos de hover */
+.dark-theme .vehicle-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+/* Animações */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.dark-theme .pulse-animation {
+  animation: pulse 2s infinite;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .dark-theme .vehicle-sidebar {
+    width: 100%;
+    position: absolute;
+    z-index: 1000;
+    height: 100%;
+  }
+  
+  .dark-theme .map-container {
+    width: 100%;
+  }
+}
+
+
+
+

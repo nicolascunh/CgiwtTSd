@@ -10,14 +10,18 @@ import { DashboardPage } from "./pages/dashboard";
 import { LoginPage } from "./pages/login";
 import { TestAuthPage } from "./pages/test-auth";
 import { DebugPage } from "./pages/debug";
+import { GoogleMapsTestPage } from "./pages/google-maps-test";
+import { ResponsiveTestPage } from "./pages/responsive-test";
+import { VehicleTrackingPage } from "./pages/vehicle-tracking";
+import { VehicleTrackingTestPage } from "./pages/vehicle-tracking-test";
+import { SimpleMapTestPage } from "./pages/simple-map-test";
+import { UltraSimpleTestPage } from "./pages/ultra-simple-test";
 import { Dashboard } from "./components/Dashboard";
 import { SettingsPage } from "./pages/settings";
 import { DevicesPage } from "./pages/devices";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import "@refinedev/antd/dist/reset.css";
-
-const API_URL = "http://35.230.168.225:8082";
 
 const App = () => {
   return (
@@ -26,8 +30,8 @@ const App = () => {
         <ThemeProvider>
           <Refine
             routerProvider={routerBindings}
-            authProvider={createAuthProvider(API_URL)}
-            dataProvider={createDataProvider(API_URL)}
+            authProvider={createAuthProvider()}
+            dataProvider={createDataProvider()}
             notificationProvider={useNotificationProvider}
             options={{
               syncWithLocation: true,
@@ -91,6 +95,12 @@ const App = () => {
               {/* Test auth route - accessible without authentication */}
               <Route path="/test-auth" element={<TestAuthPage />} />
               <Route path="/debug" element={<DebugPage />} />
+              <Route path="/google-maps-test" element={<GoogleMapsTestPage />} />
+              <Route path="/responsive-test" element={<ResponsiveTestPage />} />
+              <Route path="/vehicle-tracking" element={<VehicleTrackingPage />} />
+              <Route path="/vehicle-tracking-test" element={<VehicleTrackingTestPage />} />
+              <Route path="/simple-map-test" element={<SimpleMapTestPage />} />
+              <Route path="/ultra-simple-test" element={<UltraSimpleTestPage />} />
               
               {/* Auth routes */}
               <Route

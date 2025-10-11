@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste do Proxy Vite</title>
+</head>
+<body>
+    <h1>Teste do Proxy Vite</h1>
+    <button onclick="testProxy()">Testar Proxy</button>
+    <div id="result"></div>
+
+    <script>
+        async function testProxy() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testando proxy...';
+            
+            try {
+                // Testar requisição via proxy
+                const response = await fetch('/api/server');
+                const data = await response.text();
+                
+                resultDiv.innerHTML = `
+                    <h3>✅ Proxy funcionando!</h3>
+                    <p><strong>Status:</strong> ${response.status}</p>
+                    <p><strong>Resposta:</strong> ${data.substring(0, 200)}...</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h3>❌ Erro no proxy</h3>
+                    <p><strong>Erro:</strong> ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
+

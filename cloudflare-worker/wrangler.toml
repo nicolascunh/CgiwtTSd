@@ -1,0 +1,7 @@
+name = "trackmax-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+# Default target API; can be overridden in Cloudflare dashboard.
+TARGET_API_BASE = "http://35.230.168.225:8082/api"
