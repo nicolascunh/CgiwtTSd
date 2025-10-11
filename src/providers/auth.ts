@@ -1,26 +1,32 @@
 import type { AuthProvider } from "@refinedev/core";
+import { getApiUrl } from '../config/api';
 
-export const createAuthProvider = (apiUrl: string): AuthProvider => {
+export const createAuthProvider = (apiUrl?: string): AuthProvider => {
+  // Sempre usar getApiUrl() para garantir detecção correta do ambiente
+  const baseUrl = getApiUrl();
+  console.log('🔧 Auth Provider - Base URL:', baseUrl);
+  console.log('🔧 Auth Provider - Hostname:', typeof window !== 'undefined' ? window.location.hostname : 'server-side');
   return {
     login: async ({ username, password }: { username: string; password: string }) => {
       try {
-        // Criar dados no formato que o servidor espera
-        const formData = new URLSearchParams();
-        formData.append('action', 'login');
-        formData.append('email', username);
-        formData.append('password', password);
+        // Traccar usa Basic Auth, não sessões
+        const credentials = btoa(`${username}:${password}`);
         
-        const response = await fetch(`${apiUrl}/api/session`, {
-          method: "POST",
+        // Testar credenciais fazendo uma requisição para /api/server
+        const response = await fetch(`${baseUrl}/server`, {
+          method: "GET",
           headers: { 
-            "Content-Type": "application/x-www-form-urlencoded"
-          },
-          body: formData.toString(),
+            "Authorization": `Basic ${credentials}`
+          }
         });
 
+        console.log('Login response status:', response.status);
+        console.log('Login response headers:', Object.fromEntries(response.headers.entries()));
+        console.log('Login credentials used:', credentials);
+        console.log('Login URL:', `${baseUrl}/server`);
+
         if (response.ok) {
-          // Salvar credenciais no localStorage apenas se login for bem-sucedido
-          const credentials = btoa(`${username}:${password}`);
+          // Salvar credenciais e usuário no localStorage se login for bem-sucedido
           localStorage.setItem("auth-credentials", credentials);
           localStorage.setItem("auth-user", username);
           
@@ -36,13 +42,15 @@ export const createAuthProvider = (apiUrl: string): AuthProvider => {
         let errorMessage = "Invalid credentials";
         try {
           const errorData = await response.json();
+          console.log('Error response data:', errorData);
           errorMessage = errorData.message || errorData.error || errorMessage;
-        } catch {
+        } catch (jsonError) {
+          console.log('Could not parse error response as JSON:', jsonError);
           // Se não conseguir ler o JSON, usar status code
           if (response.status === 400) {
             errorMessage = "Usuário/Senha incorretos";
           } else if (response.status === 401) {
-            errorMessage = "Acesso não autorizado";
+            errorMessage = "Acesso não autorizado - verifique suas credenciais";
           } else if (response.status === 403) {
             errorMessage = "Access denied";
           } else if (response.status === 415) {
@@ -53,12 +61,14 @@ export const createAuthProvider = (apiUrl: string): AuthProvider => {
         }
 
         console.log('Login failed:', errorMessage);
+        console.log('Response status:', response.status);
+        console.log('Response statusText:', response.statusText);
 
         return {
           success: false,
           error: {
             name: "Login Error",
-            message: errorMessage,
+            message: `${errorMessage} (Status: ${response.status})`,
           },
         };
       } catch (error) {
@@ -74,13 +84,13 @@ export const createAuthProvider = (apiUrl: string): AuthProvider => {
     },
     check: async () => {
       try {
-        const storedCredentials = localStorage.getItem("auth-credentials");
         const storedUser = localStorage.getItem("auth-user");
+        const storedCredentials = localStorage.getItem("auth-credentials");
         
-        console.log('Checking auth - credentials:', !!storedCredentials, 'user:', storedUser);
+        console.log('Checking auth - user:', storedUser, 'credentials:', !!storedCredentials);
         
-        if (!storedCredentials || !storedUser) {
-          console.log('No stored credentials, redirecting to login');
+        if (!storedUser || !storedCredentials) {
+          console.log('No stored user or credentials, redirecting to login');
           return {
             authenticated: false,
             error: {
@@ -92,25 +102,45 @@ export const createAuthProvider = (apiUrl: string): AuthProvider => {
           };
         }
 
-        // Como o servidor Traccar não suporta verificação de sessão via GET,
-        // vamos assumir que se temos credenciais válidas, estamos autenticados
-        console.log('Have stored credentials, assuming authenticated');
-        return {
-          authenticated: true,
-        };
-      } catch (error) {
-        console.log('Check auth error:', error);
-        // Em caso de erro, verificar se temos credenciais salvas
-        const storedCredentials = localStorage.getItem("auth-credentials");
-        const storedUser = localStorage.getItem("auth-user");
-        
-        if (storedCredentials && storedUser) {
-          console.log('Network error but have stored credentials, assuming authenticated');
+        // Verificar se as credenciais ainda são válidas fazendo uma requisição para /api/server
+        try {
+          const response = await fetch(`${baseUrl}/server`, {
+            method: "GET",
+            headers: {
+              "Authorization": `Basic ${storedCredentials}`
+            }
+          });
+
+          console.log('Auth check response status:', response.status);
+
+          if (response.ok) {
+            console.log('Credentials are valid');
+            return {
+              authenticated: true,
+            };
+          } else {
+            console.log('Credentials are invalid, redirecting to login');
+            localStorage.removeItem("auth-user");
+            localStorage.removeItem("auth-credentials");
+            return {
+              authenticated: false,
+              error: {
+                name: "Authentication expired",
+                message: "Please login again",
+              },
+              logout: true,
+              redirectTo: "/login",
+            };
+          }
+        } catch (authError) {
+          console.log('Error checking auth:', authError);
+          console.log('Assuming authenticated if credentials exist');
           return {
             authenticated: true,
           };
         }
-
+      } catch (error) {
+        console.log('Check auth error:', error);
         return {
           authenticated: false,
           error: {
@@ -124,30 +154,16 @@ export const createAuthProvider = (apiUrl: string): AuthProvider => {
     },
     logout: async () => {
       try {
-        const storedCredentials = localStorage.getItem("auth-credentials");
-        
-        if (storedCredentials) {
-          // Tentar fazer logout no servidor, mas não falhar se não funcionar
-          try {
-            const response = await fetch(`${apiUrl}/api/session`, {
-              method: "DELETE",
-              headers: {
-                "Authorization": `Basic ${storedCredentials}`
-              },
-            });
-          } catch (error) {
-            // Ignorar erros de logout no servidor
-            console.log('Logout server error (ignored):', error);
-          }
-        }
+        // Para Basic Auth, não há logout no servidor, apenas limpar localStorage
+        console.log('Logging out user...');
       } catch (error) {
         // Ignorar erros de logout
         console.log('Logout error (ignored):', error);
       } finally {
-        // Sempre limpar credenciais do localStorage
+        // Sempre limpar dados do localStorage
         localStorage.removeItem("auth-credentials");
         localStorage.removeItem("auth-user");
-        console.log('Credentials cleared from localStorage');
+        console.log('User data cleared from localStorage');
       }
 
       return {

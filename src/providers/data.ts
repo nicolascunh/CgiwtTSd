@@ -1,8 +1,9 @@
 import simpleRestDataProvider from "@refinedev/simple-rest";
 import type { DataProvider } from "@refinedev/core";
+import { getApiUrl } from "../config/api";
 
-export const createDataProvider = (apiUrl: string): DataProvider => {
-  const dataProvider = simpleRestDataProvider(apiUrl);
+export const createDataProvider = (): DataProvider => {
+  const dataProvider = simpleRestDataProvider(getApiUrl());
 
   const customDataProvider: DataProvider = {
     ...dataProvider,

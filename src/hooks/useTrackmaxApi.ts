@@ -1,65 +1,302 @@
-import { useState, useEffect } from 'react';
-import type { Device, Position, User, Group, Notification } from '../types';
+import { useState } from 'react';
+import type { Device, Position, User, Group, Notification, Event, ReportTrips, MaintenanceRecord, Driver } from '../types';
+import { getApiUrl } from '../config/api';
 
-const API_URL = "http://35.230.168.225:8082/api";
+type FetchEventsParams = {
+  deviceIds?: number[];
+  types?: string[];
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+};
 
-// Configurações de paginação para performance
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_DEVICES_PER_REQUEST = 100;
+type FetchTripsParams = {
+  deviceIds?: number[];
+  from: string;
+  to: string;
+};
+
+type FetchMaintenanceParams = {
+  deviceIds?: number[];
+};
 
 export const useTrackmaxApi = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Cache para posições (5 minutos)
+  const positionsCache = new Map<string, { data: Position[]; timestamp: number }>();
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+
+  // Função para verificar cache
+  const getCachedPositions = (cacheKey: string): Position[] | null => {
+    const cached = positionsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      console.log('📦 Usando posições do cache:', cached.data.length);
+      return cached.data;
+    }
+    return null;
+  };
+
+  const fetchEvents = async (params: FetchEventsParams = {}): Promise<Event[]> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const query = new URLSearchParams();
+
+      if (params.from) {
+        query.append('from', params.from);
+      }
+      if (params.to) {
+        query.append('to', params.to);
+      }
+      if (params.page) {
+        query.append('page', params.page.toString());
+      }
+      if (params.pageSize) {
+        query.append('pageSize', params.pageSize.toString());
+      }
+
+      params.deviceIds?.forEach((id) => query.append('deviceId', id.toString()));
+      params.types?.forEach((type) => query.append('type', type));
+
+      const url = `${getApiUrl()}/events${query.toString() ? `?${query.toString()}` : ''}`;
+      console.log('🚨 Buscando eventos:', url);
+
+      const response = await fetchWithRetry(url, getFetchOptions({
+        headers: {
+          Accept: 'application/json',
+        },
+      }));
+
+      if (response.status === 404) {
+        console.warn('⚠️ Endpoint de eventos retornou 404, retornando lista vazia.');
+        return [];
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const events: Event[] = Array.isArray(data) ? data : data.events || [];
+
+      console.log('🚨 Eventos recebidos:', events.length);
+      return events;
+    } catch (err) {
+      if (err instanceof TypeError) {
+        console.warn('⚠️ Falha ao buscar eventos (possível CORS)', err.message);
+        return [];
+      }
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar eventos';
+      console.error('❌ Erro ao buscar eventos:', err);
+      setError(errorMessage);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTrips = async ({ deviceIds = [], from, to }: FetchTripsParams): Promise<ReportTrips[]> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (!from || !to) {
+        throw new Error('Parâmetros "from" e "to" são obrigatórios para buscar viagens');
+      }
+
+      const url = `${getApiUrl()}/reports/trips`;
+      const search = new URLSearchParams();
+      deviceIds.forEach((id) => search.append('deviceId', id.toString()));
+      search.append('from', from);
+      search.append('to', to);
+
+      const fullUrl = `${url}?${search.toString()}`;
+      console.log('🛣️ Buscando viagens (GET):', fullUrl);
+
+      const response = await fetchWithRetry(
+        fullUrl,
+        getFetchOptions({
+          headers: {
+            Accept: 'application/json',
+          },
+        }),
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const trips: ReportTrips[] = Array.isArray(data) ? data : data.trips || [];
+
+      console.log('🛣️ Viagens recebidas:', trips.length);
+      return trips;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar viagens';
+      console.error('❌ Erro ao buscar viagens:', err);
+      setError(errorMessage);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMaintenances = async (params: FetchMaintenanceParams = {}): Promise<MaintenanceRecord[]> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log('ℹ️ Ignorando fetch de manutenções na API (não disponível via CORS).');
+      return [];
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar manutenções';
+      console.error('❌ Erro ao buscar manutenções:', err);
+      setError(errorMessage);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDrivers = async (): Promise<Driver[]> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const url = `${getApiUrl()}/drivers`;
+      console.log('🧍‍♂️ Buscando motoristas:', url);
+
+      const response = await fetchWithRetry(url, getFetchOptions());
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const drivers: Driver[] = Array.isArray(data) ? data : data.drivers || [];
+
+      console.log('🧍‍♂️ Motoristas recebidos:', drivers.length);
+      return drivers;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar motoristas';
+      console.error('❌ Erro ao buscar motoristas:', err);
+      setError(errorMessage);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Função para salvar no cache
+  const setCachedPositions = (cacheKey: string, data: Position[]) => {
+    positionsCache.set(cacheKey, {
+      data,
+      timestamp: Date.now()
+    });
+    console.log('💾 Posições salvas no cache:', data.length);
+  };
 
   const getAuthHeaders = (): Record<string, string> => {
+    // Para Traccar, usamos Basic Auth
     const storedCredentials = localStorage.getItem("auth-credentials");
+    console.log('🔑 Credenciais recuperadas do localStorage:', storedCredentials);
     return storedCredentials ? {
       "Authorization": `Basic ${storedCredentials}`
     } : {};
   };
 
-  // Buscar dispositivos com paginação
+  const getFetchOptions = (overrides: RequestInit = {}): RequestInit => {
+    const overrideHeaders = overrides.headers as Record<string, string> | undefined;
+
+    return {
+      ...overrides,
+      headers: {
+        ...getAuthHeaders(),
+        ...overrideHeaders,
+      },
+      signal: overrides.signal ?? AbortSignal.timeout(30000),
+    };
+  };
+
+  // Função para retry com backoff exponencial
+  const fetchWithRetry = async (
+    url: string, 
+    options: RequestInit, 
+    maxRetries: number = 3
+  ): Promise<Response> => {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Tentativa ${attempt}/${maxRetries} para: ${url}`);
+        const response = await fetch(url, options);
+        
+        if (response.ok) {
+          return response;
+        }
+        
+        // Se for erro 500, tentar novamente
+        if (response.status === 500 && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000; // Backoff exponencial
+          console.log(`⏳ Erro 500, aguardando ${delay}ms antes da próxima tentativa...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        return response;
+      } catch (error) {
+        lastError = error as Error;
+        console.log(`❌ Erro na tentativa ${attempt}:`, error);
+        
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`⏳ Aguardando ${delay}ms antes da próxima tentativa...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    throw lastError || new Error('Todas as tentativas falharam');
+  };
+
   const fetchDevices = async (
     page: number = 1, 
-    pageSize: number = DEFAULT_PAGE_SIZE,
-    filters?: {
-      search?: string;
-      status?: 'online' | 'offline' | 'all';
-      groupId?: number;
-    }
+    pageSize: number = 50
   ): Promise<{ devices: Device[]; total: number; hasMore: boolean }> => {
     setLoading(true);
     setError(null);
     
     try {
-      let url = `${API_URL}/devices?limit=${pageSize}&offset=${(page - 1) * pageSize}`;
+      const url = `${getApiUrl()}/devices?limit=${pageSize}&offset=${(page - 1) * pageSize}`;
       
-      // Adicionar filtros se fornecidos
-      if (filters?.search) {
-        url += `&search=${encodeURIComponent(filters.search)}`;
-      }
-      if (filters?.groupId) {
-        url += `&groupId=${filters.groupId}`;
-      }
+      console.log('🔍 Buscando dispositivos:', url);
+      console.log('🔑 Headers:', getAuthHeaders());
+      console.log('🔑 Credenciais salvas:', !!localStorage.getItem("auth-credentials"));
 
-      const response = await fetch(url, {
-        headers: getAuthHeaders(),
-      });
+      const response = await fetchWithRetry(url, getFetchOptions());
+
+      console.log('📡 Resposta da API:', response.status, response.statusText);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('📱 Dados recebidos:', data);
       
-      // Para compatibilidade com API que não retorna paginação
       const devices = Array.isArray(data) ? data : data.devices || data;
       const total = data.total || devices.length;
       const hasMore = devices.length === pageSize;
 
+      console.log('✅ Dispositivos processados:', devices.length, devices);
+
       return { devices, total, hasMore };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar dispositivos';
+      console.error('❌ Erro ao buscar dispositivos:', err);
       setError(errorMessage);
       return { devices: [], total: 0, hasMore: false };
     } finally {
@@ -67,41 +304,83 @@ export const useTrackmaxApi = () => {
     }
   };
 
-  // Buscar posições otimizada - apenas últimas posições
   const fetchPositions = async (
     deviceIds?: number[], 
-    limit: number = 1000
+    limit: number = 500
   ): Promise<Position[]> => {
     setLoading(true);
     setError(null);
     
+    // Criar chave do cache
+    const cacheKey = `positions_${limit}_${deviceIds?.join(',') || 'all'}`;
+    
+    // Verificar cache primeiro
+    const cachedPositions = getCachedPositions(cacheKey);
+    if (cachedPositions) {
+      setLoading(false);
+      return cachedPositions;
+    }
+    
     try {
-      // Se há muitos deviceIds, buscar apenas os primeiros para evitar URLs muito longas
-      const maxDeviceIds = 50; // Limite para evitar URLs muito longas
-      const limitedDeviceIds = deviceIds && deviceIds.length > maxDeviceIds 
-        ? deviceIds.slice(0, maxDeviceIds) 
-        : deviceIds;
-
-      let url = `${API_URL}/positions?limit=${limit}`;
-      
-      // Se deviceIds for fornecido, buscar apenas para esses dispositivos
-      if (limitedDeviceIds && limitedDeviceIds.length > 0) {
-        const deviceIdParams = limitedDeviceIds.map(id => `deviceId=${id}`).join('&');
-        url += `&${deviceIdParams}`;
+      // Buscar todas as posições (sem filtro de deviceId na URL)
+      const params = new URLSearchParams({ limit: limit.toString() });
+      if (deviceIds && deviceIds.length > 0) {
+        deviceIds.forEach((id) => params.append('deviceId', id.toString()));
       }
 
-      const response = await fetch(url, {
-        headers: getAuthHeaders(),
-      });
+      const url = `${getApiUrl()}/positions?${params.toString()}`;
+
+      console.log('🔍 Buscando posições:', url);
+
+      const response = await fetchWithRetry(url, getFetchOptions({
+        headers: {
+          Accept: 'application/json',
+        },
+      }));
+
+      console.log('📡 Resposta da API (posições):', response.status, response.statusText);
+
+      if (response.status === 500) {
+        throw new Error('500');
+      }
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
       }
 
       const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      console.log('📍 Dados de posições recebidos:', data);
+      
+      let positions = Array.isArray(data) ? data : [];
+      
+      // Filtrar por deviceIds se especificado
+      if (deviceIds && deviceIds.length > 0) {
+        positions = positions.filter(pos => deviceIds.includes(pos.deviceId));
+        console.log('🔍 Posições filtradas por deviceIds:', positions.length);
+      }
+      
+      // Salvar no cache
+      setCachedPositions(cacheKey, positions);
+      
+      console.log('✅ Posições processadas:', positions.length, positions);
+
+      return positions;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar posições';
+      console.error('❌ Erro ao buscar posições:', err);
+
+      const expiredCache = positionsCache.get(cacheKey);
+      if (expiredCache) {
+        console.log('🔄 Usando cache expirado como fallback:', expiredCache.data.length);
+        setError('Dados em cache (servidor indisponível)');
+        return expiredCache.data;
+      }
+
+      if (errorMessage === '500') {
+        console.warn('⚠️ API de posições retornou 500 mesmo após retries; retornando lista vazia.');
+        return [];
+      }
+
       setError(errorMessage);
       return [];
     } finally {
@@ -109,185 +388,10 @@ export const useTrackmaxApi = () => {
     }
   };
 
-  // Buscar posições de um dispositivo específico com limite
-  const fetchDevicePositions = async (
-    deviceId: number, 
-    limit: number = 100
-  ): Promise<Position[]> => {
-    return fetchPositions([deviceId], limit);
-  };
-
-  // Buscar posições em lotes para melhor performance
-  const fetchPositionsInBatches = async (
-    deviceIds: number[],
-    batchSize: number = 20,
-    limit: number = 100
-  ): Promise<Position[]> => {
-    const allPositions: Position[] = [];
-    
-    // Dividir deviceIds em lotes
-    for (let i = 0; i < deviceIds.length; i += batchSize) {
-      const batch = deviceIds.slice(i, i + batchSize);
-      try {
-        const batchPositions = await fetchPositions(batch, limit);
-        allPositions.push(...batchPositions);
-        
-        // Pequena pausa entre lotes para não sobrecarregar o servidor
-        if (i + batchSize < deviceIds.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      } catch (err) {
-        console.error(`Erro ao buscar lote ${i / batchSize + 1}:`, err);
-      }
-    }
-    
-    return allPositions;
-  };
-
-  // Buscar estatísticas resumidas para performance
-  const fetchDeviceStats = async (deviceId: number): Promise<{
-    lastPosition?: Position;
-    totalDistance?: number;
-    totalTime?: number;
-    averageSpeed?: number;
-  }> => {
-    try {
-      const positions = await fetchDevicePositions(deviceId, 1);
-      const lastPosition = positions[0];
-      
-      // Mock stats - em produção, usar endpoint específico de estatísticas
-      return {
-        lastPosition,
-        totalDistance: Math.random() * 1000,
-        totalTime: Math.random() * 24,
-        averageSpeed: Math.random() * 80
-      };
-    } catch (err) {
-      console.error('Erro ao buscar estatísticas:', err);
-      return {};
-    }
-  };
-
-  // Buscar todos os dispositivos em lotes (para casos especiais)
-  const fetchAllDevices = async (): Promise<Device[]> => {
-    const allDevices: Device[] = [];
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore) {
-      const result = await fetchDevices(page, MAX_DEVICES_PER_REQUEST);
-      allDevices.push(...result.devices);
-      hasMore = result.hasMore;
-      page++;
-      
-      // Limite de segurança para evitar loops infinitos
-      if (page > 50) break;
-    }
-
-    return allDevices;
-  };
-
-  const fetchUsers = async (): Promise<User[]> => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(`${API_URL}/users`, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar usuários';
-      setError(errorMessage);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchGroups = async (): Promise<Group[]> => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(`${API_URL}/groups`, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar grupos';
-      setError(errorMessage);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchNotifications = async (): Promise<Notification[]> => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch(`${API_URL}/notifications`, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar notificações';
-      setError(errorMessage);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRouteReport = async (
-    deviceIds: number[], 
-    from: string, 
-    to: string
-  ): Promise<Position[]> => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const deviceIdParams = deviceIds.map(id => `deviceId=${id}`).join('&');
-      const url = `${API_URL}/reports/route?${deviceIdParams}&from=${from}&to=${to}`;
-
-      const response = await fetch(url, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar relatório de rota';
-      setError(errorMessage);
-      return [];
-    } finally {
-      setLoading(false);
-    }
+  // Função para limpar cache
+  const clearCache = () => {
+    positionsCache.clear();
+    console.log('🗑️ Cache de posições limpo');
   };
 
   return {
@@ -295,13 +399,10 @@ export const useTrackmaxApi = () => {
     error,
     fetchDevices,
     fetchPositions,
-    fetchDevicePositions,
-    fetchPositionsInBatches,
-    fetchDeviceStats,
-    fetchAllDevices,
-    fetchUsers,
-    fetchGroups,
-    fetchNotifications,
-    fetchRouteReport,
+    fetchEvents,
+    fetchTrips,
+    fetchMaintenances,
+    fetchDrivers,
+    clearCache
   };
 };

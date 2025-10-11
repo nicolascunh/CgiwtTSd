@@ -68,6 +68,19 @@ export type Group = {
   attributes: Record<string, unknown>;
 };
 
+export type Driver = {
+  id: number;
+  name: string;
+  uniqueId: string;
+  email?: string;
+  phone?: string;
+  deviceId?: number;
+  license?: string;
+  licenseExpiry?: string;
+  licenseCategory?: string;
+  attributes: Record<string, unknown>;
+};
+
 export type Notification = {
   id: number;
   type: string;
@@ -91,6 +104,16 @@ export type Event = {
   positionId: number;
   geofenceId: number;
   maintenanceId: number;
+  attributes: Record<string, unknown>;
+};
+
+export type MaintenanceRecord = {
+  id: number;
+  name: string;
+  deviceId: number;
+  start: number;
+  period: number;
+  type: "hours" | "distance" | "days";
   attributes: Record<string, unknown>;
 };
 
@@ -146,4 +169,40 @@ export type Permission = {
   attributeId: number;
   driverId: number;
   managedUserId: number;
+};
+
+// Google Maps related types
+export type GoogleMapsConfig = {
+  apiKey: string;
+  libraries: string[];
+  defaultZoom: number;
+  defaultCenter: {
+    lat: number;
+    lng: number;
+  };
+};
+
+export type MapMarker = {
+  id: number;
+  position: {
+    lat: number;
+    lng: number;
+  };
+  title: string;
+  description?: string;
+  icon?: string;
+  deviceId?: number;
+};
+
+export type MapBounds = {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+};
+
+// Environment variables type
+export type EnvironmentConfig = {
+  VITE_GOOGLE_MAPS_API_KEY: string;
+  VITE_API_URL?: string;
 };
