@@ -353,10 +353,85 @@ export const useTrackmaxApi = () => {
       
       let positions = Array.isArray(data) ? data : [];
       
+      const normalizePosition = (raw: Record<string, unknown>): Position => {
+        const rawDeviceId = typeof raw.deviceId === 'string' ? Number(raw.deviceId) : raw.deviceId;
+        const deviceId = Number.isFinite(rawDeviceId) ? (rawDeviceId as number) : 0;
+        const parseCoordinate = (value: unknown): number | undefined => {
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+          }
+          if (typeof value === 'string' && value.trim().length) {
+            const numeric = Number(value.replace(/,/g, '.'));
+            return Number.isFinite(numeric) ? numeric : undefined;
+          }
+          return undefined;
+        };
+        const latitude = parseCoordinate(raw.latitude);
+        const longitude = parseCoordinate(raw.longitude);
+        const attributes = (raw.attributes ?? {}) as Record<string, unknown>;
+        const addressCandidate =
+          (typeof raw.address === 'string' && raw.address.trim()) ||
+          (typeof attributes.address === 'string' && attributes.address.trim()) ||
+          (typeof attributes.formattedAddress === 'string' && attributes.formattedAddress.trim()) ||
+          (typeof attributes.fullAddress === 'string' && attributes.fullAddress.trim()) ||
+          '';
+
+        return {
+          ...(raw as Position),
+          deviceId,
+          latitude: latitude ?? 0,
+          longitude: longitude ?? 0,
+          address: addressCandidate,
+          attributes,
+        };
+      };
+
+      positions = positions.map((pos) => normalizePosition(pos as Record<string, unknown>));
+      
       // Filtrar por deviceIds se especificado
       if (deviceIds && deviceIds.length > 0) {
-        positions = positions.filter(pos => deviceIds.includes(pos.deviceId));
+        positions = positions.filter((pos) => deviceIds.includes(Number(pos.deviceId)));
         console.log('🔍 Posições filtradas por deviceIds:', positions.length);
+
+        const existingIds = new Set<number>();
+        positions.forEach((pos) => existingIds.add(Number(pos.deviceId)));
+        const missingIds = deviceIds.filter((id) => !existingIds.has(id));
+
+        if (missingIds.length > 0) {
+          console.warn('⚠️ Nem todas as posições foram retornadas. Buscando individualmente:', missingIds);
+          const fallbackResults = await Promise.all(
+            missingIds.map(async (id) => {
+              try {
+                const fallbackParams = new URLSearchParams({ deviceId: id.toString(), limit: '1' });
+                const fallbackUrl = `${getApiUrl()}/positions?${fallbackParams.toString()}`;
+                const fallbackResponse = await fetchWithRetry(
+                  fallbackUrl,
+                  getFetchOptions({
+                    headers: {
+                      Accept: 'application/json',
+                    },
+                  }),
+                );
+                if (!fallbackResponse.ok) {
+                  console.warn(`⚠️ Falha ao buscar posição individual para device ${id}:`, fallbackResponse.status);
+                  return [];
+                }
+                const fallbackData = await fallbackResponse.json();
+                const fallbackArray = Array.isArray(fallbackData) ? fallbackData : [];
+                return fallbackArray.map((entry) => normalizePosition(entry as Record<string, unknown>));
+              } catch (error) {
+                console.error(`❌ Erro ao buscar fallback de posição para device ${id}:`, error);
+                return [];
+              }
+            }),
+          );
+
+          const fallbackPositions = fallbackResults.flat();
+          if (fallbackPositions.length > 0) {
+            console.log('✅ Posições complementares carregadas:', fallbackPositions.length);
+            positions = [...positions, ...fallbackPositions];
+          }
+        }
       }
       
       // Salvar no cache

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useResource } from "@refinedev/core";
+import { useParsed } from "@refinedev/core";
 import { ErrorComponent } from "@refinedev/antd";
 
 export const RefineAiErrorComponent = () => {
-  const { resource, action } = useResource();
+  const { resource, action } = useParsed();
   const [isLoading, setIsLoading] = useState(false);
 
   if (!resource) {

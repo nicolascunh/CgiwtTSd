@@ -352,12 +352,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     setSelectedDevice(device);
     
     // Verificar se já temos posições para este dispositivo
-    const existingPositions = positions.filter(p => p.deviceId === device.id);
+    const existingPositions = positions.filter(p => Number(p.deviceId) === Number(device.id));
     if (existingPositions.length === 0) {
       try {
         // Carregar posições do dispositivo selecionado apenas se não existirem
         const devicePositions = await fetchPositions([device.id], 10);
-        setPositions(prev => [...prev.filter(p => p.deviceId !== device.id), ...devicePositions]);
+        setPositions(prev => [
+          ...prev.filter(p => Number(p.deviceId) !== Number(device.id)),
+          ...devicePositions,
+        ]);
       } catch (err) {
         console.error('Erro ao carregar posições do dispositivo:', err);
       }
@@ -540,15 +543,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     };
 
     positions.forEach((pos) => {
+      const deviceId = typeof pos.deviceId === 'string' ? Number(pos.deviceId) : pos.deviceId;
+      if (!Number.isFinite(deviceId)) {
+        return;
+      }
       const timestamp = parseTime(pos);
       if (!Number.isFinite(timestamp) || timestamp < startTime || timestamp > endTime) {
         return;
       }
-      const list = positionsByDevice.get(pos.deviceId);
+      const list = positionsByDevice.get(deviceId);
       if (list) {
         list.push(pos);
       } else {
-        positionsByDevice.set(pos.deviceId, [pos]);
+        positionsByDevice.set(deviceId, [pos]);
       }
     });
 
@@ -811,6 +818,112 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return `há ${days} d`;
   };
 
+  const toNumeric = (value: unknown): number | undefined => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return undefined;
+      }
+      const normalized = trimmed.replace(/,/g, '.');
+      const numeric = Number(normalized);
+      return Number.isFinite(numeric) ? numeric : undefined;
+    }
+    return undefined;
+  };
+
+  const normalizeAddress = (value: unknown): string | undefined => {
+    if (!value) {
+      return undefined;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : undefined;
+    }
+    if (typeof value === 'object') {
+      const parts = Object.values(value as Record<string, unknown>)
+        .map((part) => (typeof part === 'string' ? part.trim() : ''))
+        .filter(Boolean);
+      return parts.length ? parts.join(', ') : undefined;
+    }
+    return undefined;
+  };
+
+  const extractCoordinate = (source: Record<string, unknown> | undefined, keys: string[]): number | undefined => {
+    if (!source) {
+      return undefined;
+    }
+    for (const key of keys) {
+      if (key in source) {
+        const candidate = toNumeric(source[key]);
+        if (candidate !== undefined) {
+          return candidate;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const formatLocation = (position?: Position, device?: Device) => {
+    const attributes = position?.attributes as Record<string, unknown> | undefined;
+    const deviceAttributes = device?.attributes as Record<string, unknown> | undefined;
+
+    const addressCandidates: Array<unknown> = [
+      position?.address,
+      attributes?.address,
+      attributes?.formattedAddress,
+      attributes?.fullAddress,
+      deviceAttributes?.address,
+      deviceAttributes?.lastKnownAddress,
+      deviceAttributes?.fullAddress,
+    ];
+
+    for (const candidate of addressCandidates) {
+      const normalized = normalizeAddress(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const coordinateSource: Record<string, unknown> = {
+      ...(position as Record<string, unknown> | undefined),
+      ...(attributes || {}),
+      ...(deviceAttributes || {}),
+    };
+
+    const latitudeKeys = ['latitude', 'lat', 'Latitude', 'Lat', 'y', 'lastLatitude', 'LastLatitude'];
+    const longitudeKeys = ['longitude', 'lon', 'Longitude', 'Lon', 'lng', 'Lng', 'x', 'lastLongitude', 'LastLongitude'];
+
+    const latitude = extractCoordinate(coordinateSource, latitudeKeys);
+    const longitude = extractCoordinate(coordinateSource, longitudeKeys);
+
+    if (latitude !== undefined && longitude !== undefined) {
+      return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    }
+    if (latitude !== undefined) {
+      return latitude.toFixed(4);
+    }
+    if (longitude !== undefined) {
+      return longitude.toFixed(4);
+    }
+
+    console.warn(
+      `⚠️ Localização indisponível para dispositivo ${device?.name ?? device?.id ?? 'desconhecido'}`,
+      JSON.stringify(
+        {
+          rawPosition: position,
+          positionAttributes: attributes,
+          deviceAttributes,
+        },
+        null,
+        2,
+      ),
+    );
+    return 'Localização não disponível';
+  };
+
   const getEventStyle = (type: string) => EVENT_STYLE_MAP[type] ?? DEFAULT_EVENT_STYLE;
   const describeEvent = (type: string) => EVENT_DESCRIPTIONS[type] ?? null;
 
@@ -917,7 +1030,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       })
       .slice(0, 5)
       .map(device => {
-        const position = positions.find(pos => pos.deviceId === device.id);
+        const position = positions.find(pos => Number(pos.deviceId) === Number(device.id));
         return {
           device,
           position,
@@ -936,7 +1049,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       })
       .slice(0, 5)
       .map(device => {
-        const position = positions.find(pos => pos.deviceId === device.id);
+        const position = positions.find(pos => Number(pos.deviceId) === Number(device.id));
         return {
           device,
           position,
@@ -1226,7 +1339,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                               <Tag color="blue">{formatNumber(distanceKm, 1)} km</Tag>
                             </Space>
                             <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666', marginTop: '4px' }}>
-                              {lastPosition?.address || (lastPosition ? `${lastPosition.latitude?.toFixed(4) ?? ''}, ${lastPosition.longitude?.toFixed(4) ?? ''}` : 'Sem endereço disponível')}
+                              {formatLocation(lastPosition ?? positions.find(pos => Number(pos.deviceId) === Number(device.id)), device)}
                             </div>
                           </div>
                           <div style={{ fontSize: '12px', color: isDarkTheme ? '#cbd5f5' : '#333' }}>
@@ -1530,7 +1643,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                             }
                             description={
                               <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
-                                <div>{position?.address || `${position?.latitude?.toFixed(4) ?? ''}, ${position?.longitude?.toFixed(4) ?? ''}`}</div>
+                                <div>{formatLocation(position, device)}</div>
                                 {lastUpdate && (
                                   <div style={{ marginTop: '4px' }}>Atualizado {formatRelativeTime(lastUpdate)}</div>
                                 )}
@@ -1708,7 +1821,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   ) : viewMode === 'grid' ? (
                     <Row gutter={[16, 16]}>
                       {paginatedDevices.map((device) => {
-                        const devicePosition = positions.find(p => p.deviceId === device.id);
+                        const devicePosition = positions.find(p => Number(p.deviceId) === Number(device.id));
                         const isOnline = device.status === 'online' && !device.disabled;
                         
                         return (
@@ -1798,7 +1911,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     // Visualização em Lista
                     <div>
                       {paginatedDevices.map((device) => {
-                        const devicePosition = positions.find(p => p.deviceId === device.id);
+                        const devicePosition = positions.find(p => Number(p.deviceId) === Number(device.id));
                         const isOnline = device.status === 'online' && !device.disabled;
                         
                         return (
