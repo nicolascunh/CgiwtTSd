@@ -866,25 +866,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return undefined;
   };
 
+  const getPositionAddress = (position?: Position): string | undefined => {
+    if (!position) {
+      return undefined;
+    }
+    const attributes = position.attributes as Record<string, unknown> | undefined;
+    return (
+      normalizeAddress(position.address) ||
+      normalizeAddress(attributes?.address) ||
+      normalizeAddress(attributes?.formattedAddress) ||
+      normalizeAddress(attributes?.fullAddress) ||
+      normalizeAddress(attributes?.lastKnownAddress)
+    );
+  };
+
+  const lastKnownAddresses = useMemo(() => {
+    const map = new Map<number, string>();
+    positions.forEach((pos) => {
+      const deviceId = Number(pos.deviceId);
+      if (!Number.isFinite(deviceId)) {
+        return;
+      }
+      const address = getPositionAddress(pos);
+      if (address) {
+        map.set(deviceId, address);
+      }
+    });
+    return map;
+  }, [positions]);
+
   const formatLocation = (position?: Position, device?: Device) => {
     const attributes = position?.attributes as Record<string, unknown> | undefined;
     const deviceAttributes = device?.attributes as Record<string, unknown> | undefined;
 
-    const addressCandidates: Array<unknown> = [
-      position?.address,
-      attributes?.address,
-      attributes?.formattedAddress,
-      attributes?.fullAddress,
-      deviceAttributes?.address,
-      deviceAttributes?.lastKnownAddress,
-      deviceAttributes?.fullAddress,
-    ];
+    const directAddress = getPositionAddress(position);
+    if (directAddress) {
+      return directAddress;
+    }
 
-    for (const candidate of addressCandidates) {
-      const normalized = normalizeAddress(candidate);
-      if (normalized) {
-        return normalized;
-      }
+    const fallbackAddress =
+      normalizeAddress(deviceAttributes?.address) ??
+      normalizeAddress(deviceAttributes?.lastKnownAddress) ??
+      normalizeAddress(deviceAttributes?.fullAddress) ??
+      (device ? lastKnownAddresses.get(Number(device.id)) : undefined);
+
+    if (fallbackAddress) {
+      return fallbackAddress;
     }
 
     const coordinateSource: Record<string, unknown> = {
@@ -900,28 +927,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const longitude = extractCoordinate(coordinateSource, longitudeKeys);
 
     if (latitude !== undefined && longitude !== undefined) {
-      return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+      return `Coordenadas aproximadas: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
     }
     if (latitude !== undefined) {
-      return latitude.toFixed(4);
+      return `Latitude aproximada: ${latitude.toFixed(4)}`;
     }
     if (longitude !== undefined) {
-      return longitude.toFixed(4);
+      return `Longitude aproximada: ${longitude.toFixed(4)}`;
     }
 
-    console.warn(
-      `⚠️ Localização indisponível para dispositivo ${device?.name ?? device?.id ?? 'desconhecido'}`,
-      JSON.stringify(
-        {
-          rawPosition: position,
-          positionAttributes: attributes,
-          deviceAttributes,
-        },
-        null,
-        2,
-      ),
-    );
-    return 'Localização não disponível';
+    const fallbackLat = toNumeric(coordinateSource['latitude']);
+    const fallbackLng = toNumeric(coordinateSource['longitude']);
+    if (fallbackLat !== undefined && fallbackLng !== undefined) {
+      return `Coordenadas aproximadas: ${fallbackLat.toFixed(4)}, ${fallbackLng.toFixed(4)}`;
+    }
+    if (fallbackLat !== undefined) {
+      return `Latitude aproximada: ${fallbackLat.toFixed(4)}`;
+    }
+    if (fallbackLng !== undefined) {
+      return `Longitude aproximada: ${fallbackLng.toFixed(4)}`;
+    }
+
+    return 'Endereço não disponível';
   };
 
   const getEventStyle = (type: string) => EVENT_STYLE_MAP[type] ?? DEFAULT_EVENT_STYLE;
@@ -1247,7 +1274,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             </Row>
 
             <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
-              <Col span={12}>
+              <Col xs={24} xl={12}>
                 <Card
                   title="Manutenções Programadas"
                   className="dashboard-card theme-card"
@@ -1274,20 +1301,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 </Card>
               </Col>
 
-              <Col span={12}>
+              <Col xs={24} xl={12}>
                 <Card
                   title="Habilitações de Motoristas"
                   className="dashboard-card theme-card"
                   style={cardRaisedStyle}
                 >
                   <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
-                    <Col span={8}>
+                    <Col xs={12} md={8}>
                       <Statistic title="Motoristas" value={driverMetrics.total} />
                     </Col>
-                    <Col span={8}>
+                    <Col xs={12} md={8}>
                       <Statistic title="CNHs vencidas" value={driverMetrics.expired} valueStyle={{ color: '#ff4d4f' }} />
                     </Col>
-                    <Col span={8}>
+                    <Col xs={12} md={8}>
                       <Statistic title="Vencendo 30 dias" value={driverMetrics.expiringSoon} valueStyle={{ color: '#faad14' }} />
                     </Col>
                   </Row>
@@ -1354,7 +1381,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             </Row>
 
             <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
-              <Col span={8}>
+              <Col xs={24} md={12} xl={8}>
                 <Card
                   className="dashboard-card theme-card"
                   title="Viagens por dispositivo"
@@ -1378,7 +1405,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   />
                 </Card>
               </Col>
-              <Col span={8}>
+              <Col xs={24} md={12} xl={8}>
                 <Card
                   className="dashboard-card theme-card"
                   title="Tempo de ignição & ociosidade"
@@ -1415,7 +1442,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   />
                 </Card>
               </Col>
-              <Col span={8}>
+              <Col xs={24} md={12} xl={8}>
                 <Card
                   className="dashboard-card theme-card"
                   title="Consumo estimado"
@@ -1493,14 +1520,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
             {/* Métricas de Performance */}
             <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
-              <Col span={16}>
+              <Col xs={24} xl={16}>
                 <Card 
                   title="Performance da Frota" 
                   className="dashboard-card theme-card"
                   style={cardRaisedStyle}
                 >
                   <Row gutter={[16, 16]}>
-                    <Col span={8}>
+                    <Col xs={24} sm={12} md={8}>
                       <div style={{ textAlign: 'center', padding: '16px' }}>
                         <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>📈</div>
                         <Title level={4} style={{ margin: '0 0 4px 0' }}>
@@ -1509,7 +1536,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         <Text type="secondary">Distância percorrida no período</Text>
                       </div>
                     </Col>
-                    <Col span={8}>
+                    <Col xs={24} sm={12} md={8}>
                       <div style={{ textAlign: 'center', padding: '16px' }}>
                         <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
                         <Title level={4} style={{ margin: '0 0 4px 0' }}>
@@ -1518,7 +1545,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         <Text type="secondary">Tempo com ignição ligada</Text>
                       </div>
                     </Col>
-                    <Col span={8}>
+                    <Col xs={24} sm={12} md={8}>
                       <div style={{ textAlign: 'center', padding: '16px' }}>
                         <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>🚘</div>
                         <Title level={4} style={{ margin: '0 0 4px 0' }}>
@@ -1532,7 +1559,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   <Divider />
                   
                   <Row gutter={[16, 16]}>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <div style={{ marginBottom: '16px' }}>
                         <Text strong>Consumo estimado</Text>
                         <Title level={4} style={{ margin: '4px 0 0 0' }}>
@@ -1541,7 +1568,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         <Text type="secondary">Baseado nos consumos informados por veículo</Text>
                       </div>
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <div style={{ marginBottom: '16px' }}>
                         <Text strong>Disponibilidade da frota</Text>
                         <Progress 
@@ -1562,7 +1589,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 </Card>
               </Col>
               
-              <Col span={8}>
+              <Col xs={24} xl={8}>
                 <Space direction="vertical" size={16} style={{ width: '100%' }}>
                   <Card 
                     title="Alertas e Notificações" 
@@ -1665,23 +1692,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
             {/* Análise Detalhada */}
             <Row gutter={[24, 24]}>
-              <Col span={12}>
+              <Col xs={24} xl={12}>
                 <Card 
                   title="Distribuição por Status" 
                   className="dashboard-card theme-card"
                   style={cardRaisedStyle}
                 >
                   <Row gutter={[16, 16]}>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Statistic title="Online" value={onlineVehicles} suffix={<Tag color="green">OK</Tag>} />
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Statistic title="Offline" value={offlineVehicles} suffix={<Tag color="red">Atenção</Tag>} />
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Statistic title="Bloqueados" value={blockedVehicles} suffix={<Tag color="volcano">Bloqueado</Tag>} />
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Statistic title="Inativos" value={inactiveVehicles} suffix={<Tag color="default">Inativo</Tag>} />
                     </Col>
                   </Row>
@@ -1710,26 +1737,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 </Card>
               </Col>
               
-              <Col span={12}>
+              <Col xs={24} xl={12}>
                 <Card 
                   title="Comportamento de Condução" 
                   className="dashboard-card theme-card"
                   style={cardRaisedStyle}
                 >
                   <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase' }}>Frenagens bruscas</Text>
                       <Title level={4} style={{ margin: '4px 0 0 0' }}>{formatNumber(behaviourMetrics.harshBrakingPer100Km, 1)} / 100 km</Title>
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase' }}>Acelerações bruscas</Text>
                       <Title level={4} style={{ margin: '4px 0 0 0' }}>{formatNumber(behaviourMetrics.harshAccelerationPer100Km, 1)} / 100 km</Title>
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase' }}>Curvas bruscas</Text>
                       <Title level={4} style={{ margin: '4px 0 0 0' }}>{formatNumber(behaviourMetrics.harshCorneringPer100Km, 1)} / 100 km</Title>
                     </Col>
-                    <Col span={12}>
+                    <Col xs={24} sm={12}>
                       <Text type="secondary" style={{ fontSize: '12px', textTransform: 'uppercase' }}>Horas ociosas</Text>
                       <Title level={4} style={{ margin: '4px 0 0 0' }}>{formatNumber(behaviourMetrics.idleHours, 1)} h</Title>
                     </Col>
@@ -1825,7 +1852,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         const isOnline = device.status === 'online' && !device.disabled;
                         
                         return (
-                          <Col span={12} key={device.id}>
+                          <Col xs={24} sm={12} xl={8} key={device.id}>
                             <Card 
                               hoverable
                               style={{ 
@@ -1929,7 +1956,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                             onClick={() => handleDeviceSelect(device)}
                           >
                             <Row align="middle" gutter={16}>
-                              <Col span={2}>
+                              <Col xs={4} sm={3} md={2}>
                                 <div style={{
                                   width: '40px',
                                   height: '40px',
@@ -1944,7 +1971,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                   🚛
                                 </div>
                               </Col>
-                              <Col span={8}>
+                              <Col xs={20} sm={9} md={8}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
                                   <Title level={5} style={{ margin: 0 }}>{device.name}</Title>
                                   <div style={{
@@ -1965,12 +1992,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                 </div>
                                 <Text type="secondary">{device.uniqueId}</Text>
                               </Col>
-                              <Col span={4}>
+                              <Col xs={24} sm={6} md={4}>
                                 <div style={{ fontSize: '12px', color: '#666' }}>
                                   {device.model || 'N/A'}
                                 </div>
                               </Col>
-                              <Col span={10}>
+                              <Col xs={24} sm={12} md={10}>
                                 <div style={{ fontSize: '12px', color: '#999', marginBottom: '4px' }}>
                                   {device.lastUpdate ? new Date(device.lastUpdate).toLocaleString() : 'N/A'}
                                 </div>
@@ -2015,7 +2042,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
               </Col>
 
               {/* Vehicle Details Section */}
-              <Col span={8}>
+              <Col xs={24} lg={8}>
                 <Card 
                   className="dashboard-card"
                   style={{ 

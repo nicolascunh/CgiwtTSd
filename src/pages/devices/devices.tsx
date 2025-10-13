@@ -216,34 +216,34 @@ export const DevicesPage: React.FC = () => {
       children: (
         <div>
           <Row gutter={[16, 16]}>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('id')}:</Text>
               <br />
               <Text strong>{selectedDevice?.uniqueId}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('model')}:</Text>
               <br />
               <Text strong>{selectedDevice?.model || 'N/A'}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('status')}:</Text>
               <br />
               <Tag color={selectedDevice?.disabled ? 'red' : 'green'}>
                 {selectedDevice?.disabled ? t('offline') : t('online')}
               </Tag>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('phone')}:</Text>
               <br />
               <Text strong>{selectedDevice?.phone || 'N/A'}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('category')}:</Text>
               <br />
               <Text strong>{selectedDevice?.category || 'N/A'}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('last_update')}:</Text>
               <br />
               <Text strong>
@@ -263,7 +263,7 @@ export const DevicesPage: React.FC = () => {
       children: (
         <div>
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic
                 title={t('total_distance')}
                 value={deviceStats[selectedDevice?.id || 0]?.totalDistance || 0}
@@ -271,7 +271,7 @@ export const DevicesPage: React.FC = () => {
                 precision={1}
               />
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic
                 title={t('total_time')}
                 value={deviceStats[selectedDevice?.id || 0]?.totalTime || 0}
@@ -279,7 +279,7 @@ export const DevicesPage: React.FC = () => {
                 precision={1}
               />
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic
                 title={t('average_speed')}
                 value={deviceStats[selectedDevice?.id || 0]?.averageSpeed || 0}
@@ -287,7 +287,7 @@ export const DevicesPage: React.FC = () => {
                 precision={1}
               />
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic
                 title={t('fuel_consumption')}
                 value={45.2}
@@ -330,22 +330,22 @@ export const DevicesPage: React.FC = () => {
           </div>
           
           <Row gutter={[16, 16]}>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('phone')}:</Text>
               <br />
               <Text strong>{mockDriver.phone}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('email')}:</Text>
               <br />
               <Text strong>{mockDriver.email}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('license')}:</Text>
               <br />
               <Text strong>{mockDriver.license}</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('status')}:</Text>
               <br />
               <Tag color="green">{mockDriver.status}</Tag>
@@ -371,22 +371,22 @@ export const DevicesPage: React.FC = () => {
       children: (
         <div>
           <Row gutter={[16, 16]}>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('company_name')}:</Text>
               <br />
               <Text strong>Transportadora ABC Ltda</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('cnpj')}:</Text>
               <br />
               <Text strong>12.345.678/0001-90</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('address')}:</Text>
               <br />
               <Text strong>Rua das Flores, 123 - São Paulo, SP</Text>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Text type="secondary">{t('email')}:</Text>
               <br />
               <Text strong>contato@transportadoraabc.com</Text>
@@ -433,9 +433,9 @@ export const DevicesPage: React.FC = () => {
         />
       )}
       
-      <Row gutter={[24, 24]} style={{ height: 'calc(100vh - 120px)' }}>
+      <Row gutter={[24, 24]} style={{ minHeight: 'calc(100vh - 120px)' }}>
         {/* Lista de Dispositivos */}
-        <Col span={8} style={{ height: '100%' }}>
+        <Col xs={24} xl={8} style={{ height: '100%' }}>
           <Card 
             title={t('vehicles')} 
             style={{ height: '100%', borderRadius: '12px' }}
@@ -480,7 +480,7 @@ export const DevicesPage: React.FC = () => {
         </Col>
 
         {/* Mapa e Detalhes */}
-        <Col span={16} style={{ height: '100%' }}>
+        <Col xs={24} xl={16} style={{ height: '100%' }}>
           <Row gutter={[0, 16]} style={{ height: '100%' }}>
             {/* Mapa */}
             <Col span={24} style={{ height: '60%' }}>
