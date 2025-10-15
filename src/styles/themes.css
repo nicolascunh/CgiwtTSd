@@ -2,7 +2,7 @@
 :root {
   /* Tema Claro (padrão) - Cores do Drawer */
   --primary-color: #667eea;
-  --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --primary-gradient: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
   --secondary-color: #764ba2;
   --success-color: #667eea;
   --warning-color: #764ba2;
@@ -62,7 +62,7 @@
 /* Tema Escuro */
 [data-theme="dark"] {
   --primary-color: #667eea;
-  --primary-gradient: linear-gradient(135deg, #4338ca 0%, #7c3aed 100%);
+  --primary-gradient: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
   --secondary-color: #7c3aed;
   --success-color: #22d3ee;
   --warning-color: #f97316;

@@ -1,16 +1,16 @@
 import React from 'react';
-import { Timeline, Tag, Space, Typography, Button, Card, Row, Col } from 'antd';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
-  CarOutlined, 
-  EnvironmentOutlined, 
-  ClockCircleOutlined,
-  WarningOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined
-} from '@ant-design/icons';
+  Car, 
+  MapPin, 
+  Clock,
+  AlertTriangle,
+  Play,
+  Pause
+} from 'lucide-react';
 import type { Position } from '../types';
-
-const { Text, Title } = Typography;
 
 interface TimelineEvent {
   id: string;
@@ -92,30 +92,30 @@ export const VehicleTimeline: React.FC<VehicleTimelineProps> = ({
   const getEventIcon = (type: TimelineEvent['type']) => {
     switch (type) {
       case 'driving':
-        return <CarOutlined style={{ color: '#52c41a' }} />;
+        return <Car className="w-4 h-4 text-green-500" />;
       case 'stopped':
-        return <PauseCircleOutlined style={{ color: '#fa8c16' }} />;
+        return <Pause className="w-4 h-4 text-orange-500" />;
       case 'started':
-        return <PlayCircleOutlined style={{ color: '#1890ff' }} />;
+        return <Play className="w-4 h-4 text-blue-500" />;
       case 'warning':
-        return <WarningOutlined style={{ color: '#ff4d4f' }} />;
+        return <AlertTriangle className="w-4 h-4 text-red-500" />;
       default:
-        return <EnvironmentOutlined style={{ color: '#8c8c8c' }} />;
+        return <MapPin className="w-4 h-4 text-gray-500" />;
     }
   };
 
-  const getEventColor = (type: TimelineEvent['type']) => {
+  const getEventVariant = (type: TimelineEvent['type']) => {
     switch (type) {
       case 'driving':
-        return 'green';
+        return 'default';
       case 'stopped':
-        return 'orange';
+        return 'secondary';
       case 'started':
-        return 'blue';
+        return 'default';
       case 'warning':
-        return 'red';
+        return 'destructive';
       default:
-        return 'gray';
+        return 'secondary';
     }
   };
 
@@ -135,84 +135,67 @@ export const VehicleTimeline: React.FC<VehicleTimelineProps> = ({
   };
 
   return (
-    <Card 
-      size="small" 
-      style={{ 
-        height: '100%',
-        background: '#1f1f1f',
-        border: '1px solid #303030'
-      }}
-      bodyStyle={{ padding: '16px' }}
-    >
-      <div style={{ marginBottom: '16px' }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Title level={5} style={{ color: '#fff', margin: 0 }}>
-              Timeline
-            </Title>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
+    <Card className="h-full bg-gray-900 border-gray-700">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle className="text-white text-lg">Timeline</CardTitle>
+            <p className="text-gray-400 text-xs">
               Atualizado há {Math.round((Date.now() - lastUpdate.getTime()) / 60000)} min
-            </Text>
-          </Col>
-          <Col>
-            <Button 
-              size="small" 
-              type="text" 
-              onClick={onRefresh}
-              style={{ color: '#1890ff' }}
-            >
-              Atualizar
-            </Button>
-          </Col>
-        </Row>
-      </div>
-
-      <Timeline
-        style={{ marginTop: '16px' }}
-        items={events.map((event, index) => ({
-          dot: getEventIcon(event.type),
-          color: getEventColor(event.type),
-          children: (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ marginBottom: '4px' }}>
-                <Space>
-                  <Text strong style={{ color: '#fff' }}>
-                    {event.time}
-                  </Text>
-                  <Tag color={getEventColor(event.type)}>
-                    {getEventText(event.type)}
-                  </Tag>
-                </Space>
-              </div>
-              
-              <div style={{ marginBottom: '4px' }}>
-                <Text style={{ color: '#d9d9d9', fontSize: '13px' }}>
-                  {event.location}
-                </Text>
-              </div>
-              
-              {event.details && (
-                <div>
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
-                    {event.details}
-                  </Text>
-                </div>
-              )}
-            </div>
-          )
-        }))}
-      />
-
-      {events.length === 0 && (
-        <div style={{ 
-          textAlign: 'center', 
-          padding: '20px',
-          color: '#8c8c8c'
-        }}>
-          <ClockCircleOutlined style={{ fontSize: '24px', marginBottom: '8px' }} />
-          <div>Nenhuma atividade recente</div>
+            </p>
+          </div>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={onRefresh}
+            className="text-blue-500 hover:text-blue-400"
+          >
+            Atualizar
+          </Button>
         </div>
-      )}
+      </CardHeader>
+
+      <CardContent className="pt-0">
+        {events.length > 0 ? (
+          <div className="space-y-4">
+            {events.map((event, index) => (
+              <div key={event.id} className="flex gap-3">
+                {/* Timeline dot */}
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-800 border-2 border-gray-600 flex items-center justify-center">
+                  {getEventIcon(event.type)}
+                </div>
+                
+                {/* Event content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-semibold text-white text-sm">
+                      {event.time}
+                    </span>
+                    <Badge variant={getEventVariant(event.type)} className="text-xs">
+                      {getEventText(event.type)}
+                    </Badge>
+                  </div>
+                  
+                  <p className="text-gray-300 text-sm mb-1 truncate">
+                    {event.location}
+                  </p>
+                  
+                  {event.details && (
+                    <p className="text-gray-400 text-xs">
+                      {event.details}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-400">
+            <Clock className="w-6 h-6 mx-auto mb-2" />
+            <p>Nenhuma atividade recente</p>
+          </div>
+        )}
+      </CardContent>
     </Card>
   );
 };

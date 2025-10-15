@@ -34,7 +34,7 @@ export const createAuthProvider = (apiUrl?: string): AuthProvider => {
           
           return {
             success: true,
-            redirectTo: "/",
+            redirectTo: "/dashboard",
           };
         }
 
@@ -155,15 +155,16 @@ export const createAuthProvider = (apiUrl?: string): AuthProvider => {
     logout: async () => {
       try {
         // Para Basic Auth, não há logout no servidor, apenas limpar localStorage
-        console.log('Logging out user...');
+        console.log('🔓 Logging out user...');
       } catch (error) {
         // Ignorar erros de logout
-        console.log('Logout error (ignored):', error);
+        console.log('❌ Logout error (ignored):', error);
       } finally {
         // Sempre limpar dados do localStorage
         localStorage.removeItem("auth-credentials");
         localStorage.removeItem("auth-user");
-        console.log('User data cleared from localStorage');
+        localStorage.removeItem("welcome-completed"); // Limpar também o welcome
+        console.log('✅ User data cleared from localStorage');
       }
 
       return {

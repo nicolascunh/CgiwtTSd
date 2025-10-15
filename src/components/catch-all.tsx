@@ -58,7 +58,7 @@ export const RefineAiErrorComponent = () => {
           viewBox="0 0 216 216"
           fill="none"
         >
-          <title>TrackMax</title>
+          <title>Gestão de Frotas</title>
           <circle cx={108} cy={108} r={108} fill="#F6F7F9" opacity={0.5} />
           <path
             fill="#E3E4E5"
@@ -195,7 +195,7 @@ export const RefineAiErrorComponent = () => {
               marginTop: "16px",
             }}
           >
-            Would you like to ask TrackMax to create this page?
+            Would you like to ask Gestão de Frotas to create this page?
           </p>
 
           <button

@@ -1,5 +1,6 @@
 import { Refine, Authenticated } from "@refinedev/core";
 import routerBindings, { NavigateToResource, UnsavedChangesNotifier, CatchAllNavigate } from "@refinedev/react-router";
+import { Navigate } from "react-router";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router";
 import { useNotificationProvider } from "@refinedev/antd";
 import { createAuthProvider } from "./providers/auth";
@@ -40,7 +41,7 @@ const App = () => {
             resources={[
               {
                 name: "dashboard",
-                list: "/",
+                list: "/dashboard",
               },
               {
                 name: "devices",
@@ -106,7 +107,7 @@ const App = () => {
               <Route
                 element={
                   <Authenticated key="auth-routes" fallback={<Outlet />}>
-                    <NavigateToResource resource="dashboard" />
+                    <Navigate to="/dashboard" replace />
                   </Authenticated>
                 }>
                 <Route path="/login" element={<LoginPage />} />
@@ -122,7 +123,7 @@ const App = () => {
                   </Authenticated>
                 }>
                 {/* Dashboard route */}
-                <Route index element={<DashboardPage />} />
+                <Route index element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
                 {/* Settings route */}
                 <Route path="/settings" element={<SettingsPage />} />

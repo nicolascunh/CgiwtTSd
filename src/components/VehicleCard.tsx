@@ -1,17 +1,18 @@
 import React from 'react';
-import { Card, Tag, Space, Typography, Button, Row, Col, Statistic, Tooltip } from 'antd';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
-  CarOutlined, 
-  ClockCircleOutlined, 
-  EnvironmentOutlined, 
-  ThunderboltOutlined,
-  PhoneOutlined,
-  UserOutlined,
-  InfoCircleOutlined
-} from '@ant-design/icons';
+  Car, 
+  Clock, 
+  MapPin, 
+  Zap,
+  Phone,
+  User,
+  Info,
+  X
+} from 'lucide-react';
 import type { Device, Position } from '../types';
-
-const { Title, Text } = Typography;
 
 interface VehicleCardProps {
   device: Device;
@@ -32,10 +33,10 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   const lastUpdate = new Date(position.deviceTime);
   const speedKmh = Math.round(position.speed * 3.6); // Converter m/s para km/h
 
-  const getStatusColor = () => {
-    if (isOnline) return 'success';
-    if (position.outdated) return 'warning';
-    return 'error';
+  const getStatusVariant = () => {
+    if (isOnline) return 'default';
+    if (position.outdated) return 'secondary';
+    return 'destructive';
   };
 
   const getStatusText = () => {
@@ -50,183 +51,124 @@ export const VehicleCard: React.FC<VehicleCardProps> = ({
   };
 
   return (
-    <Card
-      size="small"
-      style={{
-        width: 320,
-        maxHeight: 400,
-        overflow: 'auto',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        borderRadius: '12px',
-        border: 'none'
-      }}
-      bodyStyle={{ padding: '16px' }}
-      actions={[
-        <Button 
-          key="select" 
-          type="primary" 
-          size="small" 
-          onClick={onSelect}
-          icon={<CarOutlined />}
-        >
-          Selecionar
-        </Button>,
-        <Button 
-          key="details" 
-          size="small" 
-          onClick={onViewDetails}
-          icon={<InfoCircleOutlined />}
-        >
-          Detalhes
-        </Button>,
-        <Button 
-          key="close" 
-          size="small" 
-          onClick={onClose}
-          type="text"
-        >
-          ✕
-        </Button>
-      ]}
-    >
-      {/* Header com nome e status */}
-      <div style={{ marginBottom: '12px' }}>
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Title level={5} style={{ margin: 0, color: '#1890ff' }}>
+    <Card className="w-80 max-h-96 overflow-auto shadow-lg">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle className="text-lg text-blue-600 mb-1">
               {device.name}
-            </Title>
-            <Text type="secondary" style={{ fontSize: '12px' }}>
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
               ID: {device.uniqueId}
-            </Text>
-          </Col>
-          <Col>
-            <Tag color={getStatusColor()} icon={<ThunderboltOutlined />}>
-              {getStatusText()}
-            </Tag>
-          </Col>
-        </Row>
-      </div>
+            </p>
+          </div>
+          <Badge variant={getStatusVariant()} className="flex items-center gap-1">
+            <Zap className="w-3 h-3" />
+            {getStatusText()}
+          </Badge>
+        </div>
+      </CardHeader>
 
-      {/* Informações principais */}
-      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+      <CardContent className="space-y-3">
         {/* Localização */}
-        <div>
-          <Row align="middle" gutter={8}>
-            <Col>
-              <EnvironmentOutlined style={{ color: '#52c41a' }} />
-            </Col>
-            <Col flex={1}>
-              <Text style={{ fontSize: '12px' }}>
-                {formatAddress(position.address)}
-              </Text>
-            </Col>
-          </Row>
+        <div className="flex items-start gap-2">
+          <MapPin className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-foreground leading-relaxed">
+            {formatAddress(position.address)}
+          </p>
         </div>
 
         {/* Coordenadas */}
-        <div>
-          <Text type="secondary" style={{ fontSize: '11px' }}>
-            Lat: {position.latitude.toFixed(6)}, Lng: {position.longitude.toFixed(6)}
-          </Text>
+        <p className="text-xs text-muted-foreground">
+          Lat: {position.latitude.toFixed(6)}, Lng: {position.longitude.toFixed(6)}
+        </p>
+
+        {/* Estatísticas */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="text-center p-2 bg-muted/50 rounded-md">
+            <p className="text-xs text-muted-foreground">Velocidade</p>
+            <p className={`text-sm font-semibold ${speedKmh > 80 ? 'text-red-500' : 'text-green-500'}`}>
+              {speedKmh} km/h
+            </p>
+          </div>
+          <div className="text-center p-2 bg-muted/50 rounded-md">
+            <p className="text-xs text-muted-foreground">Curso</p>
+            <p className="text-sm font-semibold">{position.course}°</p>
+          </div>
+          <div className="text-center p-2 bg-muted/50 rounded-md">
+            <p className="text-xs text-muted-foreground">Altitude</p>
+            <p className="text-sm font-semibold">{Math.round(position.altitude)}m</p>
+          </div>
         </div>
 
-        {/* Estatísticas em linha */}
-        <Row gutter={16}>
-          <Col span={8}>
-            <Statistic
-              title="Velocidade"
-              value={speedKmh}
-              suffix="km/h"
-              valueStyle={{ fontSize: '14px', color: speedKmh > 80 ? '#ff4d4f' : '#52c41a' }}
-            />
-          </Col>
-          <Col span={8}>
-            <Statistic
-              title="Curso"
-              value={position.course}
-              suffix="°"
-              valueStyle={{ fontSize: '14px' }}
-            />
-          </Col>
-          <Col span={8}>
-            <Statistic
-              title="Altitude"
-              value={Math.round(position.altitude)}
-              suffix="m"
-              valueStyle={{ fontSize: '14px' }}
-            />
-          </Col>
-        </Row>
-
         {/* Informações do dispositivo */}
-        <div style={{ 
-          padding: '8px', 
-          background: '#f5f5f5', 
-          borderRadius: '6px',
-          marginTop: '8px'
-        }}>
-          <Space direction="vertical" size="small" style={{ width: '100%' }}>
-            {device.phone && (
-              <Row align="middle" gutter={8}>
-                <Col>
-                  <PhoneOutlined style={{ color: '#1890ff' }} />
-                </Col>
-                <Col>
-                  <Text style={{ fontSize: '12px' }}>{device.phone}</Text>
-                </Col>
-              </Row>
-            )}
-            
-            {device.contact && (
-              <Row align="middle" gutter={8}>
-                <Col>
-                  <UserOutlined style={{ color: '#722ed1' }} />
-                </Col>
-                <Col>
-                  <Text style={{ fontSize: '12px' }}>{device.contact}</Text>
-                </Col>
-              </Row>
-            )}
+        <div className="p-3 bg-muted/30 rounded-lg space-y-2">
+          {device.phone && (
+            <div className="flex items-center gap-2">
+              <Phone className="w-3 h-3 text-blue-500" />
+              <span className="text-xs">{device.phone}</span>
+            </div>
+          )}
+          
+          {device.contact && (
+            <div className="flex items-center gap-2">
+              <User className="w-3 h-3 text-purple-500" />
+              <span className="text-xs">{device.contact}</span>
+            </div>
+          )}
 
-            {device.model && (
-              <Row align="middle" gutter={8}>
-                <Col>
-                  <CarOutlined style={{ color: '#fa8c16' }} />
-                </Col>
-                <Col>
-                  <Text style={{ fontSize: '12px' }}>{device.model}</Text>
-                </Col>
-              </Row>
-            )}
-          </Space>
+          {device.model && (
+            <div className="flex items-center gap-2">
+              <Car className="w-3 h-3 text-orange-500" />
+              <span className="text-xs">{device.model}</span>
+            </div>
+          )}
         </div>
 
         {/* Última atualização */}
-        <div>
-          <Row align="middle" gutter={8}>
-            <Col>
-              <ClockCircleOutlined style={{ color: '#8c8c8c' }} />
-            </Col>
-            <Col>
-              <Tooltip title={lastUpdate.toLocaleString()}>
-                <Text type="secondary" style={{ fontSize: '11px' }}>
-                  Atualizado há {Math.round((Date.now() - lastUpdate.getTime()) / 60000)} min
-                </Text>
-              </Tooltip>
-            </Col>
-          </Row>
+        <div className="flex items-center gap-2">
+          <Clock className="w-3 h-3 text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">
+            Atualizado há {Math.round((Date.now() - lastUpdate.getTime()) / 60000)} min
+          </p>
         </div>
 
-        {/* Informações adicionais */}
+        {/* Precisão */}
         {position.accuracy && (
-          <div>
-            <Text type="secondary" style={{ fontSize: '11px' }}>
-              Precisão: ±{Math.round(position.accuracy)}m
-            </Text>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Precisão: ±{Math.round(position.accuracy)}m
+          </p>
         )}
-      </Space>
+
+        {/* Botões de ação */}
+        <div className="flex gap-2 pt-2">
+          <Button 
+            size="sm" 
+            onClick={onSelect}
+            className="flex-1"
+          >
+            <Car className="w-3 h-3 mr-1" />
+            Selecionar
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline"
+            onClick={onViewDetails}
+            className="flex-1"
+          >
+            <Info className="w-3 h-3 mr-1" />
+            Detalhes
+          </Button>
+          <Button 
+            size="sm" 
+            variant="ghost"
+            onClick={onClose}
+            className="px-2"
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 };

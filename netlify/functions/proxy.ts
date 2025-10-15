@@ -6,6 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  // ❌ Remover Access-Control-Allow-Credentials quando Origin é *
 };
 
 const isBodyless = (method: string) => method === "GET" || method === "HEAD";
@@ -36,6 +37,10 @@ export const handler: Handler = async (event) => {
     });
   }
 
+  // ✅ Log para debug
+  console.log("Proxying to:", targetUrl);
+  console.log("Authorization header:", event.headers?.authorization ? "Present" : "Missing");
+
   const init: RequestInit = { method, headers };
 
   if (!isBodyless(method) && event.body) {
@@ -44,26 +49,30 @@ export const handler: Handler = async (event) => {
 
   try {
     const response = await fetch(targetUrl, init);
-    const responseHeaders = new Headers(response.headers);
-
-    Object.entries(corsHeaders).forEach(([key, value]) => {
-      responseHeaders.set(key, value);
-    });
-
-    const bufferedBody = await response.arrayBuffer();
-
+    
     return {
       statusCode: response.status,
-      headers: Object.fromEntries(responseHeaders.entries()),
-      body: Buffer.from(bufferedBody).toString("base64"),
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      },
+      body: Buffer.from(await response.arrayBuffer()).toString("base64"),
       isBase64Encoded: true,
     };
   } catch (error) {
     console.error("Netlify proxy error:", error);
     return {
       statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: "Proxy error" }),
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ 
+        error: "Proxy error", 
+        details: error.message,
+        targetUrl: targetUrl
+      }),
     };
   }
 };

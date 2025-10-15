@@ -1,18 +1,26 @@
 import React from 'react';
-import { Modal, Descriptions, Tag, Space, Typography, Row, Col, Statistic, Timeline, Button } from 'antd';
 import { 
-  CarOutlined, 
-  EnvironmentOutlined, 
-  ClockCircleOutlined,
-  ThunderboltOutlined,
-  PhoneOutlined,
-  UserOutlined,
-  InfoCircleOutlined,
-  HistoryOutlined
-} from '@ant-design/icons';
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  Car, 
+  MapPin, 
+  Clock,
+  Zap,
+  Phone,
+  User,
+  Info,
+  History
+} from 'lucide-react';
 import type { Device, Position } from '../types';
-
-const { Title, Text } = Typography;
 
 interface VehicleDetailsModalProps {
   visible: boolean;
@@ -35,10 +43,10 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
   const lastUpdate = new Date(position.deviceTime);
   const speedKmh = Math.round(position.speed * 3.6);
 
-  const getStatusColor = () => {
-    if (isOnline) return 'success';
-    if (position.outdated) return 'warning';
-    return 'error';
+  const getStatusVariant = () => {
+    if (isOnline) return 'default';
+    if (position.outdated) return 'secondary';
+    return 'destructive';
   };
 
   const getStatusText = () => {
@@ -52,220 +60,250 @@ export const VehicleDetailsModal: React.FC<VehicleDetailsModalProps> = ({
   };
 
   return (
-    <Modal
-      title={
-        <Space>
-          <CarOutlined style={{ color: '#1890ff' }} />
-          <span>Detalhes do Veículo</span>
-          <Tag color={getStatusColor()} icon={<ThunderboltOutlined />}>
-            {getStatusText()}
-          </Tag>
-        </Space>
-      }
-      open={visible}
-      onCancel={onClose}
-      width={800}
-      footer={[
-        <Button key="center" type="primary" onClick={onCenterMap} icon={<EnvironmentOutlined />}>
-          Centralizar no Mapa
-        </Button>,
-        <Button key="close" onClick={onClose}>
-          Fechar
-        </Button>
-      ]}
-    >
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        {/* Informações básicas do dispositivo */}
-        <div>
-          <Title level={4} style={{ marginBottom: '16px' }}>
-            {device.name}
-          </Title>
-          
-          <Descriptions bordered column={2} size="small">
-            <Descriptions.Item label="ID Único" span={1}>
-              <Text code>{device.uniqueId}</Text>
-            </Descriptions.Item>
-            <Descriptions.Item label="Status" span={1}>
-              <Tag color={getStatusColor()}>{getStatusText()}</Tag>
-            </Descriptions.Item>
-            
-            {device.phone && (
-              <Descriptions.Item label="Telefone" span={1}>
-                <Space>
-                  <PhoneOutlined />
-                  {device.phone}
-                </Space>
-              </Descriptions.Item>
-            )}
-            
-            {device.contact && (
-              <Descriptions.Item label="Contato" span={1}>
-                <Space>
-                  <UserOutlined />
-                  {device.contact}
-                </Space>
-              </Descriptions.Item>
-            )}
-            
-            {device.model && (
-              <Descriptions.Item label="Modelo" span={1}>
-                <Space>
-                  <CarOutlined />
-                  {device.model}
-                </Space>
-              </Descriptions.Item>
-            )}
-            
-            {device.category && (
-              <Descriptions.Item label="Categoria" span={1}>
-                {device.category}
-              </Descriptions.Item>
-            )}
-          </Descriptions>
-        </div>
+    <Dialog open={visible} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Car className="w-5 h-5 text-blue-500" />
+            <span>Detalhes do Veículo</span>
+            <Badge variant={getStatusVariant()} className="flex items-center gap-1">
+              <Zap className="w-3 h-3" />
+              {getStatusText()}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription>
+            Informações detalhadas sobre o veículo selecionado
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-6">
+          {/* Informações básicas do dispositivo */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-xl">{device.name}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">ID Único</label>
+                  <p className="font-mono text-sm bg-muted px-2 py-1 rounded">{device.uniqueId}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <div className="mt-1">
+                    <Badge variant={getStatusVariant()}>{getStatusText()}</Badge>
+                  </div>
+                </div>
+                
+                {device.phone && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Telefone</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Phone className="w-4 h-4" />
+                      <span>{device.phone}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {device.contact && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Contato</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <User className="w-4 h-4" />
+                      <span>{device.contact}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {device.model && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Modelo</label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Car className="w-4 h-4" />
+                      <span>{device.model}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {device.category && (
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Categoria</label>
+                    <p className="mt-1">{device.category}</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
-        {/* Posição atual */}
-        <div>
-          <Title level={5}>Posição Atual</Title>
-          
-          <Row gutter={16}>
-            <Col span={12}>
-              <Statistic
-                title="Velocidade"
-                value={speedKmh}
-                suffix="km/h"
-                valueStyle={{ color: speedKmh > 80 ? '#ff4d4f' : '#52c41a' }}
-              />
-            </Col>
-            <Col span={12}>
-              <Statistic
-                title="Curso"
-                value={position.course}
-                suffix="°"
-              />
-            </Col>
-          </Row>
-          
-          <Row gutter={16} style={{ marginTop: '16px' }}>
-            <Col span={8}>
-              <Statistic
-                title="Latitude"
-                value={position.latitude}
-                precision={6}
-              />
-            </Col>
-            <Col span={8}>
-              <Statistic
-                title="Longitude"
-                value={position.longitude}
-                precision={6}
-              />
-            </Col>
-            <Col span={8}>
-              <Statistic
-                title="Altitude"
-                value={Math.round(position.altitude)}
-                suffix="m"
-              />
-            </Col>
-          </Row>
+          {/* Posição atual */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Posição Atual</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Velocidade</p>
+                  <p className={`text-2xl font-bold ${speedKmh > 80 ? 'text-red-500' : 'text-green-500'}`}>
+                    {speedKmh} km/h
+                  </p>
+                </div>
+                <div className="text-center p-4 bg-muted/50 rounded-lg">
+                  <p className="text-sm text-muted-foreground">Curso</p>
+                  <p className="text-2xl font-bold">{position.course}°</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Latitude</p>
+                  <p className="text-sm font-mono">{position.latitude.toFixed(6)}</p>
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Longitude</p>
+                  <p className="text-sm font-mono">{position.longitude.toFixed(6)}</p>
+                </div>
+                <div className="text-center p-3 bg-muted/30 rounded-lg">
+                  <p className="text-xs text-muted-foreground">Altitude</p>
+                  <p className="text-sm font-bold">{Math.round(position.altitude)}m</p>
+                </div>
+              </div>
 
-          {position.address && (
-            <div style={{ marginTop: '16px' }}>
-              <Text strong>Endereço:</Text>
-              <br />
-              <Text>{position.address}</Text>
-            </div>
+              {position.address && (
+                <div className="mb-2">
+                  <p className="font-medium text-sm">Endereço:</p>
+                  <p className="text-sm text-muted-foreground">{position.address}</p>
+                </div>
+              )}
+
+              {position.accuracy && (
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Precisão: ±{Math.round(position.accuracy)}m
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Timestamps */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Informações de Tempo</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                  <Clock className="w-5 h-5 text-blue-500" />
+                  <div>
+                    <p className="font-medium text-sm">Dispositivo</p>
+                    <p className="text-sm text-muted-foreground">{formatTime(position.deviceTime)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                  <Zap className="w-5 h-5 text-green-500" />
+                  <div>
+                    <p className="font-medium text-sm">Fix GPS</p>
+                    <p className="text-sm text-muted-foreground">{formatTime(position.fixTime)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
+                  <History className="w-5 h-5 text-orange-500" />
+                  <div>
+                    <p className="font-medium text-sm">Servidor</p>
+                    <p className="text-sm text-muted-foreground">{formatTime(position.serverTime)}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Informações técnicas */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Informações Técnicas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Protocolo</label>
+                  <p className="mt-1">{position.protocol}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Válido</label>
+                  <div className="mt-1">
+                    <Badge variant={position.valid ? 'default' : 'destructive'}>
+                      {position.valid ? 'Sim' : 'Não'}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Desatualizado</label>
+                  <div className="mt-1">
+                    <Badge variant={position.outdated ? 'secondary' : 'default'}>
+                      {position.outdated ? 'Sim' : 'Não'}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Desabilitado</label>
+                  <div className="mt-1">
+                    <Badge variant={device.disabled ? 'destructive' : 'default'}>
+                      {device.disabled ? 'Sim' : 'Não'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Atributos adicionais */}
+          {(device.attributes && Object.keys(device.attributes).length > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Atributos do Dispositivo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {Object.entries(device.attributes).map(([key, value]) => (
+                    <div key={key} className="flex justify-between py-2 border-b border-gray-200 last:border-b-0">
+                      <span className="font-medium text-sm">{key}</span>
+                      <span className="text-sm text-muted-foreground">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
-          {position.accuracy && (
-            <div style={{ marginTop: '8px' }}>
-              <Text type="secondary">
-                Precisão: ±{Math.round(position.accuracy)}m
-              </Text>
-            </div>
+          {(position.attributes && Object.keys(position.attributes).length > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Atributos da Posição</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {Object.entries(position.attributes).map(([key, value]) => (
+                    <div key={key} className="flex justify-between py-2 border-b border-gray-200 last:border-b-0">
+                      <span className="font-medium text-sm">{key}</span>
+                      <span className="text-sm text-muted-foreground">{String(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
 
-        {/* Timestamps */}
-        <div>
-          <Title level={5}>Informações de Tempo</Title>
-          
-          <Timeline>
-            <Timeline.Item 
-              dot={<ClockCircleOutlined style={{ color: '#1890ff' }} />}
-              color="blue"
-            >
-              <Text strong>Dispositivo:</Text> {formatTime(position.deviceTime)}
-            </Timeline.Item>
-            <Timeline.Item 
-              dot={<ThunderboltOutlined style={{ color: '#52c41a' }} />}
-              color="green"
-            >
-              <Text strong>Fix GPS:</Text> {formatTime(position.fixTime)}
-            </Timeline.Item>
-            <Timeline.Item 
-              dot={<HistoryOutlined style={{ color: '#fa8c16' }} />}
-              color="orange"
-            >
-              <Text strong>Servidor:</Text> {formatTime(position.serverTime)}
-            </Timeline.Item>
-          </Timeline>
-        </div>
-
-        {/* Informações técnicas */}
-        <div>
-          <Title level={5}>Informações Técnicas</Title>
-          
-          <Descriptions bordered column={2} size="small">
-            <Descriptions.Item label="Protocolo" span={1}>
-              {position.protocol}
-            </Descriptions.Item>
-            <Descriptions.Item label="Válido" span={1}>
-              <Tag color={position.valid ? 'success' : 'error'}>
-                {position.valid ? 'Sim' : 'Não'}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="Desatualizado" span={1}>
-              <Tag color={position.outdated ? 'warning' : 'success'}>
-                {position.outdated ? 'Sim' : 'Não'}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="Desabilitado" span={1}>
-              <Tag color={device.disabled ? 'error' : 'success'}>
-                {device.disabled ? 'Sim' : 'Não'}
-              </Tag>
-            </Descriptions.Item>
-          </Descriptions>
-        </div>
-
-        {/* Atributos adicionais */}
-        {(device.attributes && Object.keys(device.attributes).length > 0) && (
-          <div>
-            <Title level={5}>Atributos do Dispositivo</Title>
-            <Descriptions bordered column={1} size="small">
-              {Object.entries(device.attributes).map(([key, value]) => (
-                <Descriptions.Item key={key} label={key}>
-                  {String(value)}
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
-          </div>
-        )}
-
-        {(position.attributes && Object.keys(position.attributes).length > 0) && (
-          <div>
-            <Title level={5}>Atributos da Posição</Title>
-            <Descriptions bordered column={1} size="small">
-              {Object.entries(position.attributes).map(([key, value]) => (
-                <Descriptions.Item key={key} label={key}>
-                  {String(value)}
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
-          </div>
-        )}
-      </Space>
-    </Modal>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Fechar
+          </Button>
+          <Button onClick={onCenterMap}>
+            <MapPin className="w-4 h-4 mr-2" />
+            Centralizar no Mapa
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };

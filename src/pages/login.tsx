@@ -1,152 +1,112 @@
 import React, { useState } from 'react';
-import { Card, Button, Input, Form, message, Typography, Divider } from 'antd';
-import { UserOutlined, LockOutlined, CarOutlined } from '@ant-design/icons';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { User, Lock } from 'lucide-react';
 import { useLogin } from '@refinedev/core';
-
-const { Title, Text } = Typography;
 
 export const LoginPage = () => {
   const [loading, setLoading] = useState(false);
-  const [form] = Form.useForm();
   const { mutate: login } = useLogin();
+  const [formValues, setFormValues] = useState({ username: '', password: '' });
 
-  const onFinish = async (values: { username: string; password: string }) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     
     try {
-      await login(values);
+      await login(formValues);
     } catch (error: any) {
-      message.error(error?.message || 'Erro ao fazer login');
+      console.error('Erro ao fazer login:', error?.message || 'Erro ao fazer login');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleInputChange = (field: string, value: string) => {
+    setFormValues(prev => ({ ...prev, [field]: value }));
+  };
+
+  const isFormValid = (formValues.username?.trim() || '') !== '' && (formValues.password?.trim() || '') !== '';
+
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'
-    }}>
-      <div style={{ 
-        background: 'white', 
-        padding: '48px', 
-        borderRadius: '16px', 
-        boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-        width: '100%',
-        maxWidth: '420px',
-        position: 'relative',
-        overflow: 'hidden'
-      }}>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-400 via-blue-500 to-blue-600">
+      <Card className="w-full max-w-md bg-white shadow-2xl rounded-2xl relative overflow-hidden">
         {/* Background decoration */}
-        <div style={{
-          position: 'absolute',
-          top: '-50px',
-          right: '-50px',
-          width: '100px',
-          height: '100px',
-          background: 'linear-gradient(45deg, #722ed1, #1890ff)',
-          borderRadius: '50%',
-          opacity: 0.1
-        }} />
+        <div className="absolute -top-12 -right-12 w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-500 rounded-full opacity-10" />
         
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <div style={{
-            width: '80px',
-            height: '80px',
-            background: 'linear-gradient(135deg, #722ed1, #1890ff)',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 24px',
-            boxShadow: '0 8px 24px rgba(114, 46, 209, 0.3)'
-          }}>
-            <CarOutlined style={{ fontSize: '32px', color: 'white' }} />
+        <CardHeader className="text-center pb-8">
+          <div className="flex flex-col items-center mb-6">
+            <img 
+              src="/image.png" 
+              alt="TrackMAX Gestão de Frotas"
+              className="max-w-xs h-auto object-contain mb-6"
+            />
           </div>
           
-          <Title level={2} style={{ margin: 0, color: '#1a1a2e', fontWeight: 'bold' }}>
-            TrackMax
-          </Title>
-          <Text type="secondary" style={{ fontSize: '16px' }}>
+          <p className="text-muted-foreground text-base">
             Faça login para acessar o sistema
-          </Text>
-        </div>
+          </p>
+        </CardHeader>
         
-        <Form
-          form={form}
-          name="login"
-          onFinish={onFinish}
-          layout="vertical"
-          size="large"
-        >
-          <Form.Item
-            name="username"
-            label="Usuário"
-            rules={[{ required: true, message: 'Por favor, informe seu usuário!' }]}
-          >
-            <Input 
-              prefix={<UserOutlined style={{ color: '#722ed1' }} />} 
-              placeholder="Digite seu usuário"
-              style={{ 
-                borderRadius: '8px',
-                height: '48px',
-                fontSize: '16px'
-              }}
-            />
-          </Form.Item>
+        <CardContent className="px-8 pb-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="username">Usuário</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="Digite seu usuário"
+                  value={formValues.username}
+                  onChange={(e) => handleInputChange('username', e.target.value)}
+                  className="pl-10 h-12 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
 
-          <Form.Item
-            name="password"
-            label="Senha"
-            rules={[{ required: true, message: 'Por favor, informe sua senha!' }]}
-          >
-            <Input.Password 
-              prefix={<LockOutlined style={{ color: '#722ed1' }} />} 
-              placeholder="Digite sua senha"
-              style={{ 
-                borderRadius: '8px',
-                height: '48px',
-                fontSize: '16px'
-              }}
-            />
-          </Form.Item>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 w-4 h-4" />
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Digite sua senha"
+                  value={formValues.password}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
+                  className="pl-10 h-12 text-base border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
 
-          <Form.Item style={{ marginBottom: '24px' }}>
             <Button 
-              type="primary" 
-              htmlType="submit" 
-              loading={loading}
-              style={{ 
-                width: '100%',
-                height: '48px',
-                background: 'linear-gradient(135deg, #722ed1, #1890ff)',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 12px rgba(114, 46, 209, 0.3)'
-              }}
+              type="submit" 
+              disabled={!isFormValid || loading}
+              className={`w-full h-12 text-base font-semibold ${
+                isFormValid 
+                  ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 hover:from-blue-500 hover:via-blue-600 hover:to-blue-700 shadow-lg' 
+                  : 'bg-gray-300 cursor-not-allowed'
+              }`}
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
-          </Form.Item>
-        </Form>
+          </form>
 
-        <Divider style={{ margin: '24px 0' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            Sistema de Gerenciamento de Frota
-          </Text>
-        </Divider>
-
-        <div style={{ textAlign: 'center' }}>
-          <Text type="secondary" style={{ fontSize: '12px' }}>
-            API: /api
-          </Text>
-        </div>
-      </div>
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <p className="text-center text-xs text-muted-foreground">
+              Sistema de Gerenciamento de Frota
+            </p>
+            <p className="text-center text-xs text-muted-foreground mt-1">
+              API: /api
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

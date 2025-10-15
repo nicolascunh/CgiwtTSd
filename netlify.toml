@@ -13,6 +13,18 @@ status = 200
 force = true
 
 [[redirects]]
+from = "/ws/*"
+to = "/.netlify/functions/websocket-proxy/:splat"
+status = 200
+force = true
+
+[[redirects]]
+from = "/sse/*"
+to = "/.netlify/functions/sse-proxy/:splat"
+status = 200
+force = true
+
+[[redirects]]
 from = "/*"
 to = "/index.html"
 status = 404

@@ -36,21 +36,23 @@ export const getApiUrl = (): string => {
 
   if (typeof window !== 'undefined') {
     console.log('🔧 getApiUrl - Hostname:', window.location.hostname);
+    console.log('🔧 getApiUrl - Protocol:', window.location.protocol);
     console.log('🔧 getApiUrl - Port:', window.location.port);
     console.log('🔧 getApiUrl - Full location:', window.location.href);
 
     if (window.location.protocol === 'https:' && window.location.hostname !== 'localhost') {
-      // Use Netlify proxy for production
-      const netlifyProxyUrl = 'https://dashboard-trackmax.netlify.app/.netlify/functions/proxy';
-      console.log('🔧 getApiUrl - Using Netlify proxy:', netlifyProxyUrl);
-      return netlifyProxyUrl;
+      // Use Cloudflare Worker proxy for production (supports WebSocket)
+      const cloudflareProxyUrl = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+      console.log('🔧 getApiUrl - Using Cloudflare Worker proxy:', cloudflareProxyUrl);
+      return cloudflareProxyUrl;
     }
   }
 
+  console.log('🔧 getApiUrl - Using fallback:', FALLBACK_API_PATH);
   return FALLBACK_API_PATH;
 };
 
-// Log para debug
-const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'server-side';
-console.log('🔧 API Config - Hostname:', currentHostname);
-console.log('🔧 API Config - getApiUrl():', getApiUrl());
+// Log para debug - removido para evitar problemas de inicialização
+// const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'server-side';
+// console.log('🔧 API Config - Hostname:', currentHostname);
+// console.log('🔧 API Config - getApiUrl():', getApiUrl());
