@@ -4,7 +4,7 @@ import { Navigate } from "react-router";
 import { BrowserRouter, Routes, Route, Outlet } from "react-router";
 import { useNotificationProvider } from "@refinedev/antd";
 import { createAuthProvider } from "./providers/auth";
-import { createDataProvider } from "./providers/data";
+// import { createDataProvider } from "./providers/data"; // Removido temporariamente
 import { RefineAiErrorComponent } from "./components/catch-all";
 import { DeviceShow } from "./pages/devices/show";
 import { DashboardPage } from "./pages/dashboard";
@@ -32,7 +32,7 @@ const App = () => {
           <Refine
             routerProvider={routerBindings}
             authProvider={createAuthProvider()}
-            dataProvider={createDataProvider()}
+            // dataProvider={createDataProvider()} // Removido temporariamente
             notificationProvider={useNotificationProvider}
             options={{
               syncWithLocation: true,

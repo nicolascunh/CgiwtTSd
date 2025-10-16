@@ -28,10 +28,10 @@ import {
 import { useNavigate, useLocation } from 'react-router';
 import { useLogout } from '@refinedev/core';
 import { useTrackmaxApi } from '../hooks/useTrackmaxApi';
-import { useTrackmaxRealtime } from '../hooks/useTrackmaxRealtime';
+// import { useTrackmaxRealtime } from '../hooks/useTrackmaxRealtime'; // Removido temporariamente
 import { useRateLimit } from '../hooks/useRateLimit';
 import { WelcomeScreen } from './WelcomeScreen';
-import { ConnectionDebug } from './ConnectionDebug';
+// import { ConnectionDebug } from './ConnectionDebug'; // Removido temporariamente
 import { RateLimitStatus } from './RateLimitStatus';
 import { LargeScaleLoader } from './LargeScaleLoader';
 import { getEventStyle, getEventLabel, getEventDescription } from '../utils/eventMapping';

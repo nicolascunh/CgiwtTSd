@@ -1,5 +1,5 @@
 import React from 'react';
-import { ConnectionDebug } from '../components/ConnectionDebug';
+// import { ConnectionDebug } from '../components/ConnectionDebug'; // Removido temporariamente
 import { WebSocketStatus } from '../components/WebSocketStatus';
 
 export const DebugConnectionPage: React.FC = () => {
@@ -7,7 +7,7 @@ export const DebugConnectionPage: React.FC = () => {
     <div className="container mx-auto p-6 space-y-6">
       <h1 className="text-3xl font-bold">Debug de Conectividade</h1>
       
-      <ConnectionDebug />
+      {/* <ConnectionDebug /> */} {/* Removido temporariamente */}
       
       <WebSocketStatus showEvents={true} />
       
