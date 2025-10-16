@@ -1,21 +1,60 @@
 import type { Handler } from "@netlify/functions";
 
-const TARGET_WS_BASE = process.env.TARGET_WS_BASE ?? "ws://35.230.168.225:8082";
-const TARGET_API_BASE = process.env.TARGET_API_BASE ?? "http://35.230.168.225:8082/api";
+const TARGET_WS_BASE =
+  process.env.TARGET_WS_BASE ?? "ws://35.230.168.225:8082";
+const TARGET_API_BASE =
+  process.env.TARGET_API_BASE ?? "http://35.230.168.225:8082/api";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  "Access-Control-Allow-Headers": "Authorization, Content-Type, Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Protocol",
-  "Access-Control-Allow-Credentials": "true",
+const ALLOWED_ORIGINS = [
+  "https://dashboard-trackmax-web.web.app",
+  "https://dashboard-trackmax.netlify.app",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+];
+
+const buildCorsHeaders = (origin?: string | null) => {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Content-Type, Accept, Authorization, Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Protocol",
+    "Access-Control-Allow-Credentials": "true",
+    "Vary": "Origin",
+  };
+
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+  } else if (!origin) {
+    headers["Access-Control-Allow-Origin"] = "null";
+  } else {
+    headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGINS[0];
+  }
+
+  return headers;
+};
+
+const parseCookies = (cookieHeader?: string) => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(";").reduce<Record<string, string>>((acc, pair) => {
+    const [key, ...rest] = pair.trim().split("=");
+    if (!key) return acc;
+    acc[key] = rest.join("=");
+    return acc;
+  }, {});
+};
+
+const getSessionId = (cookieHeader?: string) => {
+  const cookies = parseCookies(cookieHeader);
+  return cookies["trackmax.sid"];
 };
 
 const isBodyless = (method: string) => method === "GET" || method === "HEAD";
 
 export const handler: Handler = async (event) => {
   const method = (event.httpMethod || "GET").toUpperCase();
+  const origin = event.headers?.origin || event.headers?.Origin || null;
+  const corsHeaders = buildCorsHeaders(origin);
 
-  // Handle CORS preflight
   if (method === "OPTIONS") {
     return {
       statusCode: 204,
@@ -24,98 +63,139 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  // Check if this is a WebSocket upgrade request
-  const isWebSocketUpgrade = event.headers?.["upgrade"]?.toLowerCase() === "websocket" ||
-                            event.headers?.["Upgrade"]?.toLowerCase() === "websocket";
-
-  if (isWebSocketUpgrade) {
-    return handleWebSocketUpgrade(event);
+  const sessionId = getSessionId(event.headers?.cookie);
+  if (!sessionId) {
+    return {
+      statusCode: 401,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ error: "not_authenticated" }),
+    };
   }
 
-  // Handle regular HTTP requests
-  return handleHttpRequest(event);
+  const upgradeHeader =
+    event.headers?.["upgrade"] || event.headers?.["Upgrade"] || "";
+  const isWebSocketUpgrade = upgradeHeader.toLowerCase() === "websocket";
+
+  if (isWebSocketUpgrade) {
+    return handleWebSocketUpgrade(event, corsHeaders, sessionId);
+  }
+
+  return handleHttpRequest(event, corsHeaders, sessionId);
 };
 
-async function handleWebSocketUpgrade(event: any) {
+async function handleWebSocketUpgrade(
+  event: any,
+  corsHeaders: Record<string, string>,
+  sessionId: string
+) {
   try {
-    const path = event.path?.replace(/^\/.netlify\/functions\/websocket-proxy/, "") ?? "";
+    let path = event.path ?? "";
+    if (path.startsWith("/.netlify/functions/websocket-proxy")) {
+      path = path.replace(/^\/.netlify\/functions\/websocket-proxy/, "");
+    }
+    if (path.startsWith("/ws")) {
+      path = path.replace(/^\/ws/, "");
+    }
+    if (!path.startsWith("/")) {
+      path = `/${path}`;
+    }
+
     const queryString = event.rawQuery ? `?${event.rawQuery}` : "";
     const targetUrl = `${TARGET_WS_BASE.replace(/\/$/, "")}${path}${queryString}`;
 
-    // For WebSocket upgrades, we need to return a 426 Upgrade Required
-    // or handle the WebSocket connection differently
-    // Since Netlify Functions don't support persistent WebSocket connections,
-    // we'll return a response that indicates the WebSocket endpoint
-    
     return {
       statusCode: 426,
       headers: {
         ...corsHeaders,
-        "Upgrade": "websocket",
-        "Connection": "Upgrade",
-        "Sec-WebSocket-Accept": "WebSocket endpoint available",
+        Upgrade: "websocket",
+        Connection: "Upgrade",
+        "Set-Cookie": `trackmax.sid=${sessionId}; HttpOnly; Secure; SameSite=None; Path=/`,
       },
       body: JSON.stringify({
         message: "WebSocket upgrade requested",
-        targetUrl: targetUrl,
-        note: "Direct WebSocket connection required to target server"
+        targetUrl,
+        note: "Estabeleça conexão direta utilizando o mesmo cookie de sessão.",
       }),
     };
-  } catch (error) {
-    console.error("WebSocket proxy error:", error);
+  } catch (error: any) {
+    console.error("WebSocket proxy error:", error?.message);
     return {
       statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: "WebSocket proxy error" }),
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ error: "websocket_proxy_error", message: error?.message }),
     };
   }
 }
 
-async function handleHttpRequest(event: any) {
+async function handleHttpRequest(
+  event: any,
+  corsHeaders: Record<string, string>,
+  sessionId: string
+) {
   const method = (event.httpMethod || "GET").toUpperCase();
-  const path = event.path?.replace(/^\/.netlify\/functions\/websocket-proxy/, "") ?? "";
+  let path = event.path ?? "";
+  if (path.startsWith("/.netlify/functions/websocket-proxy")) {
+    path = path.replace(/^\/.netlify\/functions\/websocket-proxy/, "");
+  }
+  if (path.startsWith("/ws")) {
+    path = path.replace(/^\/ws/, "");
+  }
+  if (!path.startsWith("/")) {
+    path = `/${path}`;
+  }
+
   const queryString = event.rawQuery ? `?${event.rawQuery}` : "";
   const targetUrl = `${TARGET_API_BASE.replace(/\/$/, "")}${path}${queryString}`;
 
-  const headers = new Headers();
+  const headers = new Headers({
+    Cookie: `JSESSIONID=${sessionId}`,
+  });
 
-  if (event.headers) {
-    Object.entries(event.headers).forEach(([key, value]) => {
-      if (key.toLowerCase() === "host") return;
-      if (typeof value === "string") {
-        headers.append(key, value);
-      }
-    });
-  }
+  Object.entries(event.headers || {}).forEach(([key, value]) => {
+    if (!value) return;
+    const lower = key.toLowerCase();
+    if (["host", "authorization", "cookie"].includes(lower)) return;
+    headers.set(key, value);
+  });
 
   const init: RequestInit = { method, headers };
 
   if (!isBodyless(method) && event.body) {
-    init.body = event.isBase64Encoded ? Buffer.from(event.body, "base64") : event.body;
+    init.body = event.isBase64Encoded
+      ? Buffer.from(event.body, "base64")
+      : event.body;
   }
 
   try {
     const response = await fetch(targetUrl, init);
-    const responseHeaders = new Headers(response.headers);
-
-    Object.entries(corsHeaders).forEach(([key, value]) => {
-      responseHeaders.set(key, value);
-    });
-
-    const bufferedBody = await response.arrayBuffer();
+    const bodyBuffer = Buffer.from(await response.arrayBuffer());
+    const headersOut = new Headers(corsHeaders);
+    headersOut.set(
+      "Content-Type",
+      response.headers.get("content-type") ?? "application/json"
+    );
 
     return {
       statusCode: response.status,
-      headers: Object.fromEntries(responseHeaders.entries()),
-      body: Buffer.from(bufferedBody).toString("base64"),
+      headers: Object.fromEntries(headersOut.entries()),
+      body: bodyBuffer.toString("base64"),
       isBase64Encoded: true,
     };
-  } catch (error) {
-    console.error("HTTP proxy error:", error);
+  } catch (error: any) {
+    console.error("HTTP proxy error:", error?.message);
     return {
-      statusCode: 500,
-      headers: corsHeaders,
-      body: JSON.stringify({ error: "HTTP proxy error" }),
+      statusCode: 504,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ error: "http_proxy_error", message: error?.message }),
     };
   }
 }
