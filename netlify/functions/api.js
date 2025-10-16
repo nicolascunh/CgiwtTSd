@@ -32,7 +32,11 @@ export const handler = async (event) => {
   
   try {
     // Extrair path da requisição
-    const path = event.path.replace('/api', '');
+    let path = event.path.replace('/.netlify/functions/api', '');
+    if (!path || path === '/') {
+      path = '/server'; // Default para /server se path estiver vazio
+    }
+    
     const queryString = event.queryStringParameters ? 
       '?' + new URLSearchParams(event.queryStringParameters).toString() : '';
     
