@@ -90,9 +90,21 @@ export const handler: Handler = async (event) => {
   if (method === "OPTIONS") {
     // Log para debug
     console.log("OPTIONS request received", { origin, corsHeaders });
+    
+    // Headers CORS explícitos para garantir que sejam aplicados
+    const explicitCorsHeaders = {
+      "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
+      "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Accept, Authorization, X-Requested-With, Origin",
+      "Access-Control-Allow-Credentials": "true",
+      "Vary": "Origin",
+    };
+    
+    console.log("Explicit CORS headers", explicitCorsHeaders);
+    
     return {
       statusCode: 204,
-      headers: corsHeaders,
+      headers: explicitCorsHeaders,
       body: "",
     };
   }

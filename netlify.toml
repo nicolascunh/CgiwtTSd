@@ -7,16 +7,17 @@ framework = "vite"
 directory = "netlify/functions"
 
 [[redirects]]
-from = "/api/*"
-to = "/.netlify/functions/proxy/:splat"
+from = "/api/session"
+to = "/.netlify/functions/session"
 status = 200
 force = true
 
 [[redirects]]
-from = "/ws/*"
-to = "/.netlify/functions/websocket-proxy/:splat"
+from = "/api/*"
+to = "/.netlify/functions/proxy/:splat"
 status = 200
 force = true
+conditions = {Role = ["admin"]}
 
 [[redirects]]
 from = "/sse/*"
