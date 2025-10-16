@@ -59,6 +59,9 @@ importers:
       antd:
         specifier: ^5.17.0
         version: 5.26.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      axios:
+        specifier: ^1.12.2
+        version: 1.12.2
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

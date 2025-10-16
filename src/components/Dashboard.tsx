@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { CSSProperties } from 'react';
-import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete } from 'antd';
+import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge } from 'antd';
 import type { MenuProps } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import packageJson from '../../package.json';
+// import packageJson from '../../package.json'; // Removido para evitar problemas de build
 import { 
   CarOutlined, 
   UserOutlined, 
@@ -29,8 +29,12 @@ import { useNavigate, useLocation } from 'react-router';
 import { useLogout } from '@refinedev/core';
 import { useTrackmaxApi } from '../hooks/useTrackmaxApi';
 import { useTrackmaxRealtime } from '../hooks/useTrackmaxRealtime';
+import { useRateLimit } from '../hooks/useRateLimit';
 import { WelcomeScreen } from './WelcomeScreen';
 import { ConnectionDebug } from './ConnectionDebug';
+import { RateLimitStatus } from './RateLimitStatus';
+import { LargeScaleLoader } from './LargeScaleLoader';
+import { getEventStyle, getEventLabel, getEventDescription } from '../utils/eventMapping';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { convertToKmh } from '../utils/speedUtils';
@@ -45,91 +49,7 @@ const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
-const EVENT_STYLE_MAP: Record<string, { label: string; icon: string; color: string; lightBg: string; darkBg: string }> = {
-  overspeed: {
-    label: 'Excesso de velocidade',
-    icon: '🚦',
-    color: '#fa8c16',
-    lightBg: '#fff2e8',
-    darkBg: 'rgba(250, 140, 22, 0.18)',
-  },
-  engineBlock: {
-    label: 'Veículo bloqueado',
-    icon: '🔒',
-    color: '#ff4d4f',
-    lightBg: '#fff1f0',
-    darkBg: 'rgba(255, 77, 79, 0.2)',
-  },
-  powerCut: {
-    label: 'Corte de alimentação',
-    icon: '🔌',
-    color: '#13c2c2',
-    lightBg: '#e6fffb',
-    darkBg: 'rgba(19, 194, 194, 0.2)',
-  },
-  geofenceEnter: {
-    label: 'Entrada em geocerca',
-    icon: '🧱',
-    color: '#2f54eb',
-    lightBg: '#f0f5ff',
-    darkBg: 'rgba(47, 84, 235, 0.2)',
-  },
-  geofenceExit: {
-    label: 'Saída de geocerca',
-    icon: '🧱',
-    color: '#722ed1',
-    lightBg: '#f9f0ff',
-    darkBg: 'rgba(114, 46, 209, 0.2)',
-  },
-  harshBraking: {
-    label: 'Frenagem brusca',
-    icon: '🛑',
-    color: '#cf1322',
-    lightBg: '#fff1f0',
-    darkBg: 'rgba(207, 19, 34, 0.2)',
-  },
-  harshAcceleration: {
-    label: 'Aceleração brusca',
-    icon: '⚡',
-    color: '#52c41a',
-    lightBg: '#f6ffed',
-    darkBg: 'rgba(82, 196, 26, 0.18)',
-  },
-  harshCornering: {
-    label: 'Curva brusca',
-    icon: '↩️',
-    color: '#faad14',
-    lightBg: '#fff7e6',
-    darkBg: 'rgba(250, 173, 20, 0.18)',
-  },
-  idle: {
-    label: 'Motor ocioso',
-    icon: '💤',
-    color: '#08979c',
-    lightBg: '#e6fffb',
-    darkBg: 'rgba(8, 151, 156, 0.18)',
-  },
-};
-
-const DEFAULT_EVENT_STYLE: { label: string; icon: string; color: string; lightBg: string; darkBg: string } = {
-  label: 'Evento',
-  icon: '⚠️',
-  color: '#faad14',
-  lightBg: '#fff7e6',
-  darkBg: 'rgba(250, 173, 20, 0.18)',
-};
-
-const EVENT_DESCRIPTIONS: Record<string, string> = {
-  overspeed: 'Velocidade acima do limite configurado.',
-  engineBlock: 'Relé ou comando de bloqueio acionado.',
-  powerCut: 'Alimentação principal interrompida.',
-  geofenceEnter: 'Veículo entrou na geocerca monitorada.',
-  geofenceExit: 'Veículo saiu da geocerca monitorada.',
-  harshBraking: 'Desaceleração brusca detectada.',
-  harshAcceleration: 'Aceleração brusca detectada.',
-  harshCornering: 'Curva com força lateral elevada.',
-  idle: 'Motor ligado com veículo parado.',
-};
+// Mapeamento de eventos movido para utils/eventMapping.ts
 
 interface DashboardProps {
   children?: React.ReactNode;
@@ -146,6 +66,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [events, setEvents] = useState<Event[]>([]);
   const [trips, setTrips] = useState<ReportTrips[]>([]);
   const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
+  
+  // Estados para paginação de eventos
+  const [currentEventPage, setCurrentEventPage] = useState(0);
+  const EVENTS_PER_PAGE = 5;
+  
+  // Estados para grande escala
+  const [isLargeScaleLoading, setIsLargeScaleLoading] = useState(false);
+  const [largeScaleProgress, setLargeScaleProgress] = useState({
+    totalDevices: 0,
+    processedDevices: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    currentOperation: '',
+    estimatedTimeRemaining: 0,
+    errors: [] as string[]
+  });
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
@@ -168,6 +104,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   
   // Estado para tela de boas-vindas
   const [showWelcome, setShowWelcome] = useState<boolean>(false);
+  
+  // Hook para gerenciar rate limiting
+  const { rateLimitState, resetRateLimit, isRateLimited } = useRateLimit();
 
   // Detectar tamanho da tela
   useEffect(() => {
@@ -226,7 +165,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const { theme, toggleTheme } = useTheme();
   const isDarkTheme = theme === 'dark';
   const isDebugMode = typeof window !== 'undefined' && window.localStorage.getItem('debug-mode') === 'true';
-  const appVersion = (packageJson as { version?: string }).version ?? '0.0.0';
+  const appVersion = '1.0.0'; // Versão fixa para evitar problemas de build
 
   const sidebarBackground = 'var(--bg-sidebar-gradient)';
   const sidebarBorder = '1px solid var(--sidebar-border-color)';
@@ -277,6 +216,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const loadData = async () => {
       try {
         console.log('🚀 DEBUG - Starting data load...');
+        console.log('🔧 DEBUG - isLargeFleetLoading state:', isLargeFleetLoading);
         const result = await fetchDevices();
         const devicesData = result.devices || [];
         console.log('📱 DEBUG - Devices loaded:', devicesData.length, devicesData);
@@ -364,6 +304,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
+      } finally {
+        // Sempre resetar o loading de frota grande
+        setIsLargeFleetLoading(false);
       }
     };
 
@@ -1167,8 +1110,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return 'Endereço não disponível';
   };
 
-  const getEventStyle = (type: string) => EVENT_STYLE_MAP[type] ?? DEFAULT_EVENT_STYLE;
-  const describeEvent = (type: string) => EVENT_DESCRIPTIONS[type] ?? null;
+  // Função getEventStyle movida para utils/eventMapping.ts
+  const describeEvent = (type: string) => getEventDescription(type);
 
   const recentEvents = useMemo(() => {
     console.log('🔍 DEBUG - recentEvents calculation:', {
@@ -1197,6 +1140,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     
     return recent;
   }, [events]);
+
+  // Calcular eventos paginados
+  const paginatedEvents = useMemo(() => {
+    const startIndex = currentEventPage * EVENTS_PER_PAGE;
+    const endIndex = startIndex + EVENTS_PER_PAGE;
+    return recentEvents.slice(startIndex, endIndex);
+  }, [recentEvents, currentEventPage, EVENTS_PER_PAGE]);
+
+  // Calcular total de páginas
+  const totalEventPages = Math.ceil(recentEvents.length / EVENTS_PER_PAGE);
 
   const behaviourMetrics = useMemo(() => {
     const distance = Math.max(totalDistanceKm, 0.01);
@@ -1236,20 +1189,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const seventyTwoHoursAgo = new Date(now.getTime() - 72 * 60 * 60 * 1000);
     
     return (allDevices || [])
-      .filter(device => {
-        const lastUpdate = device.lastUpdate ? new Date(device.lastUpdate) : null;
-        return lastUpdate && lastUpdate < seventyTwoHoursAgo;
+      .map(device => {
+        // Encontrar a posição mais recente do dispositivo
+        const devicePosition = positions.find(pos => pos.deviceId === device.id);
+        if (!devicePosition) return null;
+        
+        const lastUpdate = new Date(devicePosition.deviceTime);
+        const isOffline72h = lastUpdate < seventyTwoHoursAgo;
+        
+        if (isOffline72h) {
+          return {
+            device,
+            lastUpdate: devicePosition.deviceTime
+          };
+        }
+        return null;
       })
-      .map(device => ({
-        device,
-        lastUpdate: device.lastUpdate || new Date()
-      }));
-  }, [allDevices]);
+      .filter((item): item is { device: Device; lastUpdate: string } => item !== null);
+  }, [allDevices, positions]);
 
   const powerCutDevices = useMemo(() => {
-    // Simular dispositivos com alimentação cortada (mesmo critério por enquanto)
-    return offlineDevices72h;
-  }, [offlineDevices72h]);
+    return (allDevices || [])
+      .map(device => {
+        // Verificar se o dispositivo tem powerCut == true nos attributes
+        const powerCut = device.attributes?.powerCut;
+        if (powerCut === true) {
+          // Encontrar a posição mais recente do dispositivo
+          const devicePosition = positions.find(pos => pos.deviceId === device.id);
+          return {
+            device,
+            lastUpdate: devicePosition?.deviceTime || device.lastUpdate || new Date().toISOString()
+          };
+        }
+        return null;
+      })
+      .filter((item): item is { device: Device; lastUpdate: string } => item !== null);
+  }, [allDevices, positions]);
 
   const harshBrakingCount = useMemo(() => {
     // Simular contagem de frenagens bruscas baseada nos eventos
@@ -1553,11 +1528,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 format="DD/MM/YYYY HH:mm"
                     style={{ width: '100%', height: '40px' }}
                 disabledDate={(current) => !!current && current > dayjs()}
-                ranges={{
-                  'Últimas 24h': [dayjs().subtract(24, 'hour'), dayjs()],
-                  'Últimos 7 dias': [dayjs().subtract(7, 'day').startOf('day'), dayjs()],
-                  'Este mês': [dayjs().startOf('month'), dayjs()],
-                }}
+                presets={[
+                  { label: 'Últimas 24h', value: [dayjs().subtract(24, 'hour'), dayjs()] },
+                  { label: 'Últimos 7 dias', value: [dayjs().subtract(7, 'day').startOf('day'), dayjs()] },
+                  { label: 'Este mês', value: [dayjs().startOf('month'), dayjs()] },
+                ]}
               />
                 </Col>
                 <Col xs={24} md={4}>
@@ -1780,12 +1755,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     className="dashboard-card theme-card"
                   style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
                   >
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                       {recentEvents.length === 0 ? (
                       <div>
                         <Empty
                           description="Nenhum alerta registrado nas últimas horas"
-                          imageStyle={{ height: 80 }}
+                          styles={{ image: { height: 80 } }}
                         />
                         {isDebugMode && (
                           <div style={{ marginTop: '16px', padding: '12px', background: '#f0f0f0', borderRadius: '6px' }}>
@@ -1835,7 +1810,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                           </div>
                         )}
                       </div>
-                      ) : recentEvents.map((event) => {
+                      ) : (
+                        <>
+                          {/* Lista de eventos com scroll interno */}
+                          <div style={{ 
+                            flex: 1, 
+                            overflowY: 'auto', 
+                            overflowX: 'hidden',
+                            maxHeight: '300px',
+                            paddingRight: '4px',
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
+                          }}>
+                            {paginatedEvents.map((event) => {
                         const style = getEventStyle(event.type);
                         const description = describeEvent(event.type);
                         const deviceName = deviceMap.get(event.deviceId)?.name || `Dispositivo ${event.deviceId}`;
@@ -1880,7 +1867,44 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                             </div>
                           </div>
                         );
-                      })}
+                            })}
+                          </div>
+                          
+                          {/* Controles de paginação */}
+                          {totalEventPages > 1 && (
+                            <div style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center',
+                              padding: '12px 0',
+                              borderTop: `1px solid ${isDarkTheme ? '#374151' : '#e5e7eb'}`,
+                              marginTop: '8px'
+                            }}>
+                              <div style={{ fontSize: '12px', color: isDarkTheme ? '#9ca3af' : '#6b7280' }}>
+                                Página {currentEventPage + 1} de {totalEventPages} • {recentEvents.length} eventos
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <Button
+                                  size="small"
+                                  disabled={currentEventPage === 0}
+                                  onClick={() => setCurrentEventPage(Math.max(0, currentEventPage - 1))}
+                                  style={{ fontSize: '11px', height: '24px' }}
+                                >
+                                  ← Anterior
+                                </Button>
+                                <Button
+                                  size="small"
+                                  disabled={currentEventPage >= totalEventPages - 1}
+                                  onClick={() => setCurrentEventPage(Math.min(totalEventPages - 1, currentEventPage + 1))}
+                                  style={{ fontSize: '11px', height: '24px' }}
+                                >
+                                  Próxima →
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </Card>
               </Col>
@@ -1890,61 +1914,111 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
               <Col xs={24} md={8}>
                   <Card
-                  title="Veículos OFFLINE A MAIS DE 72 HORAS"
+                  title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <span style={{ flex: 1 }}>Veículos OFFLINE A MAIS DE 72 HORAS</span>
+                      <Badge 
+                        count={offlineDevices72h.length} 
+                        style={{ 
+                          backgroundColor: '#ff4d4f',
+                          marginLeft: '8px',
+                          flexShrink: 0
+                        }} 
+                      />
+                    </div>
+                  }
                     className="dashboard-card theme-card"
-                    style={cardRaisedStyle}
+                    style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
+                    styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
                   >
+                    <div 
+                      className="custom-scroll-container"
+                      style={{ 
+                        flex: 1, 
+                        overflowY: 'auto', 
+                        overflowX: 'hidden',
+                        maxHeight: '300px',
+                        paddingRight: '4px',
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
+                      }}>
+                      <List
+                        dataSource={offlineDevices72h}
+                        locale={{ emptyText: 'Nenhum veículo offline há mais de 72h' }}
+                        renderItem={({ device, lastUpdate }) => (
+                          <List.Item style={{ padding: '8px 0' }}>
+                            <List.Item.Meta
+                              title={
+                                <Space size={8}>
+                                <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
+                                  <span>{device.name}</span>
+                                </Space>
+                              }
+                              description={
+                                <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
+                                Último sinal há {formatRelativeTime(lastUpdate)}
+                                </div>
+                              }
+                            />
+                          </List.Item>
+                        )}
+                      />
+                    </div>
+                  </Card>
+              </Col>
+
+              <Col xs={24} md={8}>
+                <Card
+                  title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <span style={{ flex: 1 }}>Veículos com Alimentação Cortada</span>
+                      <Badge 
+                        count={powerCutDevices.length} 
+                        style={{ 
+                          backgroundColor: '#ff4d4f',
+                          marginLeft: '8px',
+                          flexShrink: 0
+                        }} 
+                      />
+                    </div>
+                  }
+                  className="dashboard-card theme-card"
+                  style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
+                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
+                >
+                  <div 
+                    className="custom-scroll-container"
+                    style={{ 
+                      flex: 1, 
+                      overflowY: 'auto', 
+                      overflowX: 'hidden',
+                      maxHeight: '300px',
+                      paddingRight: '4px',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
+                    }}>
                     <List
-                    dataSource={offlineDevices72h}
-                    locale={{ emptyText: 'Nenhum veículo offline há mais de 72h' }}
-                    renderItem={({ device, lastUpdate }) => (
+                      dataSource={powerCutDevices}
+                      locale={{ emptyText: 'Nenhum veículo com alimentação cortada' }}
+                      renderItem={({ device, lastUpdate }) => (
                         <List.Item style={{ padding: '8px 0' }}>
                           <List.Item.Meta
                             title={
                               <Space size={8}>
-                              <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
+                                <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
                                 <span>{device.name}</span>
                               </Space>
                             }
                             description={
                               <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
-                              Último sinal há {formatRelativeTime(lastUpdate instanceof Date ? lastUpdate.toISOString() : lastUpdate)}
+                                Último sinal há {formatRelativeTime(lastUpdate)}
                               </div>
                             }
                           />
                         </List.Item>
                       )}
                     />
-                  </Card>
-              </Col>
-
-              <Col xs={24} md={8}>
-                <Card
-                  title="Veículos com Alimentação Cortada"
-                  className="dashboard-card theme-card"
-                  style={cardRaisedStyle}
-                >
-                  <List
-                    dataSource={powerCutDevices}
-                    locale={{ emptyText: 'Nenhum veículo com alimentação cortada' }}
-                    renderItem={({ device, lastUpdate }) => (
-                      <List.Item style={{ padding: '8px 0' }}>
-                        <List.Item.Meta
-                          title={
-                            <Space size={8}>
-                              <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
-                              <span>{device.name}</span>
-                </Space>
-                          }
-                          description={
-                            <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
-                              Último sinal há {formatRelativeTime(lastUpdate instanceof Date ? lastUpdate.toISOString() : lastUpdate)}
-                            </div>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
+                  </div>
                 </Card>
               </Col>
 
@@ -1962,7 +2036,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   title="Manutenções Programadas"
                   className="dashboard-card theme-card"
                   style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
-                  bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column' } }}
                 >
                   <Text type="secondary" style={{ display: 'block', marginBottom: '12px' }}>
                     Próximas manutenções registradas nos dispositivos.
@@ -2003,7 +2077,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   title="Habilitações de Motoristas"
                   className="dashboard-card theme-card"
                   style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
-                  bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column' } }}
                 >
                   <Text type="secondary" style={{ display: 'block', marginBottom: '12px' }}>
                     Status das habilitações e validades dos motoristas.
@@ -3923,6 +3997,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         transition: 'background-color 0.3s ease',
       }}
     >
+      {/* Rate Limiting Status */}
+      <RateLimitStatus 
+        isActive={isRateLimited} 
+        onRetry={resetRateLimit}
+      />
       {/* Drawer/Sidebar com animações */}
       <Sider 
         trigger={null} 
@@ -4136,6 +4215,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           userName={localStorage.getItem('auth-user') || undefined}
         />
       )}
+      
+      {/* Loader para Grande Escala */}
+      <LargeScaleLoader
+        isVisible={isLargeScaleLoading}
+        totalDevices={largeScaleProgress.totalDevices}
+        processedDevices={largeScaleProgress.processedDevices}
+        currentBatch={largeScaleProgress.currentBatch}
+        totalBatches={largeScaleProgress.totalBatches}
+        currentOperation={largeScaleProgress.currentOperation}
+        estimatedTimeRemaining={largeScaleProgress.estimatedTimeRemaining}
+        errors={largeScaleProgress.errors}
+        onRetry={() => {
+          console.log('🔄 Retry solicitado para grande escala');
+          // Implementar lógica de retry
+        }}
+        onCancel={() => {
+          console.log('❌ Cancelar processamento de grande escala');
+          setIsLargeScaleLoading(false);
+        }}
+      />
     </Layout>
   );
 };
