@@ -37,6 +37,8 @@ const buildCorsHeaders = (origin?: string | null) => {
     headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGINS[0];
   }
 
+  // Log para debug
+  console.log("CORS headers built", { origin, headers });
   return headers;
 };
 
@@ -86,6 +88,8 @@ export const handler: Handler = async (event) => {
   const corsHeaders = buildCorsHeaders(origin);
 
   if (method === "OPTIONS") {
+    // Log para debug
+    console.log("OPTIONS request received", { origin, corsHeaders });
     return {
       statusCode: 204,
       headers: corsHeaders,
