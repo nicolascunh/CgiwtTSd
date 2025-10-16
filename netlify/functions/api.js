@@ -33,8 +33,15 @@ export const handler = async (event) => {
   try {
     // Extrair path da requisição
     let path = event.path.replace('/.netlify/functions/api', '');
+    
+    // Se o path começar com /api, remover o prefixo /api
+    if (path.startsWith('/api')) {
+      path = path.replace('/api', '');
+    }
+    
+    // Se path estiver vazio ou for apenas '/', usar /server como default
     if (!path || path === '/') {
-      path = '/server'; // Default para /server se path estiver vazio
+      path = '/server';
     }
     
     const queryString = event.queryStringParameters ? 
