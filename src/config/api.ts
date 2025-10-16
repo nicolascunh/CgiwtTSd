@@ -1,58 +1,34 @@
-/**
- * Configuração da API
- * Detecta automaticamente se está em desenvolvimento ou produção
- */
+// Configuração da API - Voltando para Cloudflare Worker devido a problemas CORS no Netlify
+const CLOUDFLARE_WORKER_URL = "https://trackmax-proxy.trackmax-proxy.workers.dev/api";
+const NETLIFY_PROXY_URL = "https://dashboard-trackmax.netlify.app/api";
+const DIRECT_API_URL = "http://35.230.168.225:8082/api";
 
-const FALLBACK_API_PATH = '/api';
-const resolveEnvProxyUrl = (): string | undefined => {
-  try {
-    const value = (import.meta as unknown as { env?: Record<string, string | undefined> })?.env?.VITE_TRACKMAX_PROXY_URL;
-    if (value && value.trim().length > 0) {
-      return value.trim();
-    }
-  } catch {
-    // Ambiente sem import.meta (e.g. testes)
+const isLocalhost = (hostname: string) =>
+  hostname === "localhost" ||
+  hostname === "127.0.0.1" ||
+  hostname.endsWith(".local");
+
+export const getApiUrlSync = (): string => {
+  if (typeof window === "undefined") {
+    return CLOUDFLARE_WORKER_URL;
   }
-  return undefined;
-};
-const resolveNetlifyProxyUrl = (): string | undefined => {
-  try {
-    const value = (import.meta as unknown as { env?: Record<string, string | undefined> })?.env?.VITE_NETLIFY_PROXY_URL;
-    if (value && value.trim().length > 0) {
-      return value.trim();
-    }
-  } catch {
-    // ignore
+
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+
+  if (isLocalhost(hostname) || ["3003", "5173", "4173"].includes(port)) {
+    return DIRECT_API_URL;
   }
-  return undefined;
+
+  // Em produção, usar Cloudflare Worker que tem CORS configurado corretamente
+  return CLOUDFLARE_WORKER_URL;
 };
 
-export const getApiUrl = (): string => {
-  const envProxyUrl = resolveEnvProxyUrl();
-  if (envProxyUrl) {
-    console.log('🔧 getApiUrl - Using VITE_TRACKMAX_PROXY_URL:', envProxyUrl);
-    return envProxyUrl;
-  }
-
-  if (typeof window !== 'undefined') {
-    console.log('🔧 getApiUrl - Hostname:', window.location.hostname);
-    console.log('🔧 getApiUrl - Protocol:', window.location.protocol);
-    console.log('🔧 getApiUrl - Port:', window.location.port);
-    console.log('🔧 getApiUrl - Full location:', window.location.href);
-
-    if (window.location.protocol === 'https:' && window.location.hostname !== 'localhost') {
-      // Use Cloudflare Worker proxy for production (supports WebSocket)
-      const cloudflareProxyUrl = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
-      console.log('🔧 getApiUrl - Using Cloudflare Worker proxy:', cloudflareProxyUrl);
-      return cloudflareProxyUrl;
-    }
-  }
-
-  console.log('🔧 getApiUrl - Using fallback:', FALLBACK_API_PATH);
-  return FALLBACK_API_PATH;
+export const getApiUrl = async (): Promise<string> => {
+  return getApiUrlSync();
 };
 
-// Log para debug - removido para evitar problemas de inicialização
-// const currentHostname = typeof window !== 'undefined' ? window.location.hostname : 'server-side';
-// console.log('🔧 API Config - Hostname:', currentHostname);
-// console.log('🔧 API Config - getApiUrl():', getApiUrl());
+export const API_BASE_URL = CLOUDFLARE_WORKER_URL;
+
+console.log("🔧 API Config - Base URL:", API_BASE_URL);
+console.log("🔄 Voltando para Cloudflare Worker devido a problemas CORS no Netlify");
