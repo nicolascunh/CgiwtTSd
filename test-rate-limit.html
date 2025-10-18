@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Rate Limiting</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+        .credentials { display: flex; gap: 10px; margin: 10px 0; }
+        .log { background: #f5f5f5; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Teste Rate Limiting</h1>
+    
+    <div class="info">
+        <h3>ℹ️ Teste de Rate Limiting</h3>
+        <p>Este teste verifica se o erro HTTP 429 (Too Many Requests) foi resolvido.</p>
+        <p>O sistema agora faz requisições sequenciais com delay para evitar rate limiting.</p>
+    </div>
+    
+    <div class="test">
+        <h3>Teste de Login com Rate Limiting</h3>
+        <div class="credentials">
+            <input type="text" id="username" placeholder="Usuário" value="admin">
+            <input type="password" id="password" placeholder="Senha" value="admin">
+            <button onclick="testLoginWithRateLimit()">Testar Login</button>
+        </div>
+        <div id="result"></div>
+        <div id="log" class="log"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Teste de Múltiplas Requisições</h3>
+        <button onclick="testMultipleRequests()">Testar Múltiplas Requisições</button>
+        <div id="multipleResult"></div>
+    </div>
+
+    <script>
+        const CLOUDFLARE_WORKER_URL = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        async function testLoginWithRateLimit() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!username || !password) {
+                resultDiv.innerHTML = '<div class="error">❌ Por favor, preencha usuário e senha</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Testando login com rate limiting...';
+            log('Iniciando teste de login...');
+            
+            try {
+                const credentials = btoa(`${username}:${password}`);
+                
+                // Teste 1: /api/server
+                log('Testando /api/server...');
+                const serverResponse = await fetch(`${CLOUDFLARE_WORKER_URL}/server`, {
+                    headers: { 'Authorization': `Basic ${credentials}` }
+                });
+                log(`Server response: ${serverResponse.status}`);
+                
+                if (serverResponse.ok) {
+                    // Teste 2: /api/devices (com delay)
+                    log('Aguardando 500ms antes de testar /api/devices...');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    log('Testando /api/devices...');
+                    const devicesResponse = await fetch(`${CLOUDFLARE_WORKER_URL}/devices?limit=1`, {
+                        headers: { 'Authorization': `Basic ${credentials}` }
+                    });
+                    log(`Devices response: ${devicesResponse.status}`);
+                    
+                    if (devicesResponse.status === 429) {
+                        resultDiv.innerHTML = '<div class="error">❌ Erro 429 ainda ocorre - Rate limiting ativo</div>';
+                    } else if (devicesResponse.ok) {
+                        resultDiv.innerHTML = '<div class="success">✅ Login completo - Sem rate limiting</div>';
+                    } else {
+                        resultDiv.innerHTML = '<div class="warning">⚠️ Login parcial - Sem rate limiting, mas permissões limitadas</div>';
+                    }
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ Credenciais inválidas</div>';
+                }
+                
+            } catch (error) {
+                log(`Erro: ${error.message}`);
+                resultDiv.innerHTML = `<div class="error">❌ Erro: ${error.message}</div>`;
+            }
+        }
+        
+        async function testMultipleRequests() {
+            const resultDiv = document.getElementById('multipleResult');
+            resultDiv.innerHTML = 'Testando múltiplas requisições...';
+            
+            const credentials = btoa('admin:admin');
+            let successCount = 0;
+            let errorCount = 0;
+            let rateLimitCount = 0;
+            
+            for (let i = 1; i <= 5; i++) {
+                try {
+                    const response = await fetch(`${CLOUDFLARE_WORKER_URL}/server`, {
+                        headers: { 'Authorization': `Basic ${credentials}` }
+                    });
+                    
+                    if (response.status === 429) {
+                        rateLimitCount++;
+                    } else if (response.ok) {
+                        successCount++;
+                    } else {
+                        errorCount++;
+                    }
+                    
+                    // Delay entre requisições
+                    if (i < 5) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                    
+                } catch (error) {
+                    errorCount++;
+                }
+            }
+            
+            let result = '<div class="test">';
+            result += `<h4>Resultado de 5 requisições:</h4>`;
+            result += `<p>✅ Sucessos: ${successCount}</p>`;
+            result += `<p>❌ Erros: ${errorCount}</p>`;
+            result += `<p>🚫 Rate Limits (429): ${rateLimitCount}</p>`;
+            
+            if (rateLimitCount === 0) {
+                result += '<p class="success">✅ Sem rate limiting detectado!</p>';
+            } else {
+                result += '<p class="error">❌ Rate limiting ainda ativo!</p>';
+            }
+            
+            result += '</div>';
+            resultDiv.innerHTML = result;
+        }
+    </script>
+</body>
+</html>
+
+
+

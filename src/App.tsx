@@ -37,6 +37,7 @@ const App = () => {
             options={{
               syncWithLocation: true,
               warnWhenUnsavedChanges: true,
+              disableTelemetry: true,
             }}
             resources={[
               {

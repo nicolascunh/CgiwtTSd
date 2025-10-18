@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug API Config - TrackMax</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { background-color: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Debug API Config - TrackMax</h1>
+        
+        <div id="env-info" class="info">
+            <h3>Informações do Ambiente:</h3>
+            <div id="env-details"></div>
+        </div>
+
+        <div id="api-tests">
+            <h3>Testes de API:</h3>
+            <button onclick="testApiConfig()">Testar Configuração da API</button>
+            <button onclick="testWithCredentials()">Testar com Credenciais</button>
+            <button onclick="testAllEndpoints()">Testar Todos os Endpoints</button>
+            <div id="test-results"></div>
+        </div>
+    </div>
+
+    <script>
+        // Simular a função getApiUrl da aplicação
+        const FALLBACK_API_PATH = '/api';
+        
+        const resolveEnvProxyUrl = () => {
+            // Simular variável de ambiente
+            return undefined;
+        };
+
+        const getApiUrl = () => {
+            const envProxyUrl = resolveEnvProxyUrl();
+            if (envProxyUrl) {
+                console.log('🔧 getApiUrl - Using VITE_TRACKMAX_PROXY_URL:', envProxyUrl);
+                return envProxyUrl;
+            }
+
+            if (typeof window !== 'undefined') {
+                console.log('🔧 getApiUrl - Hostname:', window.location.hostname);
+                console.log('🔧 getApiUrl - Protocol:', window.location.protocol);
+                console.log('🔧 getApiUrl - Port:', window.location.port);
+                console.log('🔧 getApiUrl - Full location:', window.location.href);
+
+                // Forçar uso do Cloudflare Worker para produção
+                if (window.location.hostname.includes('web.app') || 
+                    window.location.hostname.includes('netlify.app') ||
+                    (window.location.protocol === 'https:' && window.location.hostname !== 'localhost')) {
+                    // Use Cloudflare Worker proxy for production (supports WebSocket)
+                    const cloudflareProxyUrl = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+                    console.log('🔧 getApiUrl - Using Cloudflare Worker proxy:', cloudflareProxyUrl);
+                    return cloudflareProxyUrl;
+                }
+            }
+
+            console.log('🔧 getApiUrl - Using fallback:', FALLBACK_API_PATH);
+            return FALLBACK_API_PATH;
+        };
+
+        function displayEnvInfo() {
+            const envDetails = document.getElementById('env-details');
+            const apiUrl = getApiUrl();
+            
+            envDetails.innerHTML = `
+                <p><strong>Hostname:</strong> ${window.location.hostname}</p>
+                <p><strong>Protocol:</strong> ${window.location.protocol}</p>
+                <p><strong>Port:</strong> ${window.location.port || 'default'}</p>
+                <p><strong>Full URL:</strong> ${window.location.href}</p>
+                <p><strong>API URL Configurada:</strong> ${apiUrl}</p>
+                <p><strong>É HTTPS:</strong> ${window.location.protocol === 'https:'}</p>
+                <p><strong>É localhost:</strong> ${window.location.hostname === 'localhost'}</p>
+                <p><strong>Contém web.app:</strong> ${window.location.hostname.includes('web.app')}</p>
+                <p><strong>Contém netlify.app:</strong> ${window.location.hostname.includes('netlify.app')}</p>
+            `;
+        }
+
+        async function testApiConfig() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<p>Testando configuração da API...</p>';
+            
+            try {
+                const apiUrl = getApiUrl();
+                const testUrl = `${apiUrl}/server`;
+                
+                console.log('Testando URL:', testUrl);
+                
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Configuração da API OK!</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Resposta:</strong></p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    results.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erro na configuração da API</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Status Text:</strong> ${response.statusText}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erro na requisição</h4>
+                        <p><strong>Erro:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testWithCredentials() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<p>Testando com credenciais ndev:2025...</p>';
+            
+            try {
+                const apiUrl = getApiUrl();
+                const testUrl = `${apiUrl}/devices`;
+                const credentials = btoa('ndev:2025');
+                
+                console.log('Testando URL com credenciais:', testUrl);
+                
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Basic ${credentials}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Autenticação OK!</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Dispositivos encontrados:</strong> ${data.length}</p>
+                            <p><strong>Primeiro dispositivo:</strong> ${data[0]?.name || 'N/A'}</p>
+                        </div>
+                    `;
+                } else {
+                    results.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erro na autenticação</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Status Text:</strong> ${response.statusText}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erro na requisição</h4>
+                        <p><strong>Erro:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testAllEndpoints() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<p>Testando todos os endpoints...</p>';
+            
+            const apiUrl = getApiUrl();
+            const credentials = btoa('ndev:2025');
+            const endpoints = ['/server', '/devices', '/positions', '/events'];
+            
+            let html = '<h4>Resultados dos Testes:</h4>';
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const testUrl = `${apiUrl}${endpoint}`;
+                    const response = await fetch(testUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Basic ${credentials}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        html += `<div class="success">✅ ${endpoint}: OK (${response.status})</div>`;
+                    } else {
+                        html += `<div class="error">❌ ${endpoint}: ERRO (${response.status})</div>`;
+                    }
+                } catch (error) {
+                    html += `<div class="error">❌ ${endpoint}: ERRO - ${error.message}</div>`;
+                }
+            }
+            
+            results.innerHTML = html;
+        }
+
+        // Inicializar página
+        window.onload = function() {
+            displayEnvInfo();
+        };
+    </script>
+</body>
+</html>
+
+
+

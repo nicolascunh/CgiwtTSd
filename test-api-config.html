@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Configuração da API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste de Configuração da API</h1>
+        
+        <div id="info" class="test-result info">
+            <h3>Informações do Ambiente:</h3>
+            <div id="env-info"></div>
+        </div>
+
+        <div id="api-test" class="test-result">
+            <h3>Teste da API:</h3>
+            <button onclick="testApiConnection()">Testar Conexão com API</button>
+            <button onclick="testWithAuth()">Testar com Autenticação</button>
+            <div id="api-results"></div>
+        </div>
+
+        <div id="config-test" class="test-result">
+            <h3>Configuração da API:</h3>
+            <div id="config-results"></div>
+        </div>
+    </div>
+
+    <script>
+        // Simular a função getApiUrl da aplicação
+        const FALLBACK_API_PATH = '/api';
+        
+        const resolveEnvProxyUrl = () => {
+            // Simular variável de ambiente
+            return undefined;
+        };
+
+        const getApiUrl = () => {
+            const envProxyUrl = resolveEnvProxyUrl();
+            if (envProxyUrl) {
+                console.log('🔧 getApiUrl - Using VITE_TRACKMAX_PROXY_URL:', envProxyUrl);
+                return envProxyUrl;
+            }
+
+            if (typeof window !== 'undefined') {
+                console.log('🔧 getApiUrl - Hostname:', window.location.hostname);
+                console.log('🔧 getApiUrl - Protocol:', window.location.protocol);
+                console.log('🔧 getApiUrl - Port:', window.location.port);
+                console.log('🔧 getApiUrl - Full location:', window.location.href);
+
+                if (window.location.protocol === 'https:' && window.location.hostname !== 'localhost') {
+                    // Use Cloudflare Worker proxy for production (supports WebSocket)
+                    const cloudflareProxyUrl = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+                    console.log('🔧 getApiUrl - Using Cloudflare Worker proxy:', cloudflareProxyUrl);
+                    return cloudflareProxyUrl;
+                }
+            }
+
+            console.log('🔧 getApiUrl - Using fallback:', FALLBACK_API_PATH);
+            return FALLBACK_API_PATH;
+        };
+
+        // Exibir informações do ambiente
+        function displayEnvInfo() {
+            const envInfo = document.getElementById('env-info');
+            const apiUrl = getApiUrl();
+            
+            envInfo.innerHTML = `
+                <p><strong>Hostname:</strong> ${window.location.hostname}</p>
+                <p><strong>Protocol:</strong> ${window.location.protocol}</p>
+                <p><strong>Port:</strong> ${window.location.port || 'default'}</p>
+                <p><strong>Full URL:</strong> ${window.location.href}</p>
+                <p><strong>API URL Configurada:</strong> ${apiUrl}</p>
+                <p><strong>É HTTPS:</strong> ${window.location.protocol === 'https:'}</p>
+                <p><strong>É localhost:</strong> ${window.location.hostname === 'localhost'}</p>
+            `;
+        }
+
+        // Testar conexão com API
+        async function testApiConnection() {
+            const results = document.getElementById('api-results');
+            results.innerHTML = '<p>Testando conexão...</p>';
+            
+            try {
+                const apiUrl = getApiUrl();
+                const testUrl = `${apiUrl}/server`;
+                
+                console.log('Testando URL:', testUrl);
+                
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Conexão bem-sucedida!</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Resposta:</strong></p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    results.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erro na conexão</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Status Text:</strong> ${response.statusText}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erro na requisição</h4>
+                        <p><strong>Erro:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Testar com autenticação
+        async function testWithAuth() {
+            const results = document.getElementById('api-results');
+            results.innerHTML = '<p>Testando com autenticação...</p>';
+            
+            try {
+                const apiUrl = getApiUrl();
+                const testUrl = `${apiUrl}/server`;
+                const credentials = btoa('admin:admin'); // Base64 encode
+                
+                console.log('Testando URL com auth:', testUrl);
+                
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Basic ${credentials}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    results.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Autenticação bem-sucedida!</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Headers enviados:</strong> Authorization: Basic ${credentials}</p>
+                            <p><strong>Resposta:</strong></p>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    results.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Erro na autenticação</h4>
+                            <p><strong>Status:</strong> ${response.status}</p>
+                            <p><strong>URL testada:</strong> ${testUrl}</p>
+                            <p><strong>Status Text:</strong> ${response.statusText}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Erro na requisição</h4>
+                        <p><strong>Erro:</strong> ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Exibir configuração
+        function displayConfig() {
+            const configResults = document.getElementById('config-results');
+            const apiUrl = getApiUrl();
+            
+            configResults.innerHTML = `
+                <div class="info">
+                    <h4>Configuração Atual:</h4>
+                    <p><strong>URL da API:</strong> ${apiUrl}</p>
+                    <p><strong>Tipo de Proxy:</strong> ${apiUrl.includes('cloudflare') ? 'Cloudflare Worker' : apiUrl.includes('netlify') ? 'Netlify Functions' : 'Local/Fallback'}</p>
+                    <p><strong>Variável de ambiente VITE_TRACKMAX_PROXY_URL:</strong> ${resolveEnvProxyUrl() || 'Não definida'}</p>
+                </div>
+            `;
+        }
+
+        // Inicializar página
+        window.onload = function() {
+            displayEnvInfo();
+            displayConfig();
+        };
+    </script>
+</body>
+</html>
+
+
+

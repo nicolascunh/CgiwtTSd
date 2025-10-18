@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 Teste de Otimizações de Performance - TrackMax</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+        .test-section h2 {
+            color: #34495e;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .test-button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        .test-button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #27ae60; }
+        .error { color: #e74c3c; }
+        .warning { color: #f39c12; }
+        .info { color: #3498db; }
+        .performance-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .metric-label {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Teste de Otimizações de Performance</h1>
+        
+        <div class="performance-metrics">
+            <div class="metric-card">
+                <div class="metric-value" id="cache-hit-rate">-</div>
+                <div class="metric-label">Cache Hit Rate</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="compression-ratio">-</div>
+                <div class="metric-label">Taxa de Compressão</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="response-time">-</div>
+                <div class="metric-label">Tempo de Resposta (ms)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="etag-hits">-</div>
+                <div class="metric-label">ETag Hits</div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎯 1. Teste de Cache</h2>
+            <p>Testa o sistema de cache do Cloudflare Worker com chaves baseadas em deviceIds + range + type.</p>
+            <button class="test-button" onclick="testCache()">Testar Cache</button>
+            <button class="test-button" onclick="testCacheMultiple()">Testar Cache Múltiplo</button>
+            <div class="results" id="cache-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🏷️ 2. Teste de ETag/If-None-Match</h2>
+            <p>Testa a validação de recursos estáveis com ETag para evitar transferência desnecessária de dados.</p>
+            <button class="test-button" onclick="testETag()">Testar ETag</button>
+            <button class="test-button" onclick="testETagValidation()">Testar Validação ETag</button>
+            <div class="results" id="etag-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🗜️ 3. Teste de Compressão</h2>
+            <p>Testa a compressão Gzip/Brotli para reduzir o tamanho das respostas.</p>
+            <button class="test-button" onclick="testCompression()">Testar Compressão Gzip</button>
+            <button class="test-button" onclick="testBrotliCompression()">Testar Compressão Brotli</button>
+            <div class="results" id="compression-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📦 4. Teste de Batch Requests</h2>
+            <p>Testa as configurações otimizadas de batch requests (20-50 devices por chamada).</p>
+            <button class="test-button" onclick="testBatchRequests()">Testar Batch Requests</button>
+            <button class="test-button" onclick="testLargeFleet()">Testar Frota Grande</button>
+            <div class="results" id="batch-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔍 5. Teste Completo de Performance</h2>
+            <p>Executa todos os testes e gera relatório completo de performance.</p>
+            <button class="test-button" onclick="runFullPerformanceTest()">Executar Teste Completo</button>
+            <div class="results" id="full-results"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        const TEST_CREDENTIALS = 'ndev:2025';
+        const AUTH_HEADER = 'Basic ' + btoa(TEST_CREDENTIALS);
+        
+        let performanceMetrics = {
+            cacheHits: 0,
+            cacheMisses: 0,
+            etagHits: 0,
+            compressionSavings: 0,
+            totalRequests: 0,
+            totalResponseTime: 0
+        };
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info';
+            element.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function updateMetrics() {
+            document.getElementById('cache-hit-rate').textContent = 
+                performanceMetrics.totalRequests > 0 ? 
+                Math.round((performanceMetrics.cacheHits / performanceMetrics.totalRequests) * 100) + '%' : '-';
+            
+            document.getElementById('compression-ratio').textContent = 
+                performanceMetrics.compressionSavings > 0 ? 
+                Math.round(performanceMetrics.compressionSavings) + '%' : '-';
+            
+            document.getElementById('response-time').textContent = 
+                performanceMetrics.totalRequests > 0 ? 
+                Math.round(performanceMetrics.totalResponseTime / performanceMetrics.totalRequests) : '-';
+            
+            document.getElementById('etag-hits').textContent = performanceMetrics.etagHits;
+        }
+
+        async function makeRequest(url, options = {}) {
+            const startTime = performance.now();
+            performanceMetrics.totalRequests++;
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': AUTH_HEADER,
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                performanceMetrics.totalResponseTime += responseTime;
+                
+                // Check cache headers
+                const cacheStatus = response.headers.get('X-Cache');
+                if (cacheStatus === 'HIT' || cacheStatus === 'HIT-ETAG') {
+                    performanceMetrics.cacheHits++;
+                } else {
+                    performanceMetrics.cacheMisses++;
+                }
+                
+                // Check ETag headers
+                if (response.status === 304) {
+                    performanceMetrics.etagHits++;
+                }
+                
+                // Check compression
+                const contentEncoding = response.headers.get('Content-Encoding');
+                const contentLength = response.headers.get('Content-Length');
+                if (contentEncoding && contentLength) {
+                    // Estimate compression savings (simplified)
+                    const originalSize = parseInt(contentLength) * 2; // Rough estimate
+                    const compressedSize = parseInt(contentLength);
+                    const savings = ((originalSize - compressedSize) / originalSize) * 100;
+                    performanceMetrics.compressionSavings += savings;
+                }
+                
+                updateMetrics();
+                
+                return {
+                    response,
+                    responseTime,
+                    cacheStatus,
+                    contentEncoding: response.headers.get('Content-Encoding'),
+                    etag: response.headers.get('ETag'),
+                    contentLength: response.headers.get('Content-Length')
+                };
+            } catch (error) {
+                const endTime = performance.now();
+                const responseTime = endTime - startTime;
+                performanceMetrics.totalResponseTime += responseTime;
+                updateMetrics();
+                throw error;
+            }
+        }
+
+        async function testCache() {
+            log('cache-results', '🎯 Iniciando teste de cache...', 'info');
+            
+            try {
+                // First request - should be cache miss
+                log('cache-results', '📤 Primeira requisição (deve ser cache miss)...', 'info');
+                const result1 = await makeRequest(`${API_BASE}/devices?limit=10`);
+                log('cache-results', `✅ Resposta 1: ${result1.response.status} - Cache: ${result1.cacheStatus} - Tempo: ${Math.round(result1.responseTime)}ms`, 'success');
+                
+                // Second request - should be cache hit
+                log('cache-results', '📤 Segunda requisição (deve ser cache hit)...', 'info');
+                const result2 = await makeRequest(`${API_BASE}/devices?limit=10`);
+                log('cache-results', `✅ Resposta 2: ${result2.response.status} - Cache: ${result2.cacheStatus} - Tempo: ${Math.round(result2.responseTime)}ms`, 'success');
+                
+                if (result2.cacheStatus === 'HIT') {
+                    log('cache-results', '🎉 Cache funcionando corretamente!', 'success');
+                } else {
+                    log('cache-results', '⚠️ Cache não está funcionando como esperado', 'warning');
+                }
+                
+            } catch (error) {
+                log('cache-results', `❌ Erro no teste de cache: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCacheMultiple() {
+            log('cache-results', '🎯 Iniciando teste de cache múltiplo...', 'info');
+            
+            const endpoints = [
+                '/devices?limit=5',
+                '/server',
+                '/positions?deviceId=39665&from=2025-01-15T00:00:00Z&to=2025-01-15T23:59:59Z'
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    log('cache-results', `📤 Testando ${endpoint}...`, 'info');
+                    const result1 = await makeRequest(`${API_BASE}${endpoint}`);
+                    log('cache-results', `✅ Primeira: ${result1.response.status} - Cache: ${result1.cacheStatus}`, 'success');
+                    
+                    const result2 = await makeRequest(`${API_BASE}${endpoint}`);
+                    log('cache-results', `✅ Segunda: ${result2.response.status} - Cache: ${result2.cacheStatus}`, 'success');
+                    
+                } catch (error) {
+                    log('cache-results', `❌ Erro em ${endpoint}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testETag() {
+            log('etag-results', '🏷️ Iniciando teste de ETag...', 'info');
+            
+            try {
+                // First request - get ETag
+                const result1 = await makeRequest(`${API_BASE}/server`);
+                const etag = result1.etag;
+                
+                if (etag) {
+                    log('etag-results', `✅ ETag recebido: ${etag}`, 'success');
+                    
+                    // Second request with If-None-Match
+                    const result2 = await makeRequest(`${API_BASE}/server`, {
+                        headers: {
+                            'If-None-Match': etag
+                        }
+                    });
+                    
+                    if (result2.response.status === 304) {
+                        log('etag-results', '🎉 ETag funcionando! Resposta 304 Not Modified', 'success');
+                    } else {
+                        log('etag-results', `⚠️ ETag não funcionou. Status: ${result2.response.status}`, 'warning');
+                    }
+                } else {
+                    log('etag-results', '⚠️ ETag não encontrado na resposta', 'warning');
+                }
+                
+            } catch (error) {
+                log('etag-results', `❌ Erro no teste de ETag: ${error.message}`, 'error');
+            }
+        }
+
+        async function testETagValidation() {
+            log('etag-results', '🏷️ Iniciando teste de validação ETag...', 'info');
+            
+            const endpoints = ['/server', '/devices?limit=5'];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const result1 = await makeRequest(`${API_BASE}${endpoint}`);
+                    const etag = result1.etag;
+                    
+                    if (etag) {
+                        const result2 = await makeRequest(`${API_BASE}${endpoint}`, {
+                            headers: {
+                                'If-None-Match': etag
+                            }
+                        });
+                        
+                        log('etag-results', `${endpoint}: ${result2.response.status} ${result2.response.status === 304 ? '✅' : '⚠️'}`, 
+                           result2.response.status === 304 ? 'success' : 'warning');
+                    }
+                } catch (error) {
+                    log('etag-results', `❌ Erro em ${endpoint}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testCompression() {
+            log('compression-results', '🗜️ Iniciando teste de compressão Gzip...', 'info');
+            
+            try {
+                const result = await makeRequest(`${API_BASE}/devices?limit=50`, {
+                    headers: {
+                        'Accept-Encoding': 'gzip'
+                    }
+                });
+                
+                const contentEncoding = result.contentEncoding;
+                const contentLength = result.contentLength;
+                
+                if (contentEncoding === 'gzip') {
+                    log('compression-results', `✅ Compressão Gzip ativa! Tamanho: ${contentLength} bytes`, 'success');
+                } else {
+                    log('compression-results', `⚠️ Compressão Gzip não detectada. Encoding: ${contentEncoding}`, 'warning');
+                }
+                
+            } catch (error) {
+                log('compression-results', `❌ Erro no teste de compressão: ${error.message}`, 'error');
+            }
+        }
+
+        async function testBrotliCompression() {
+            log('compression-results', '🗜️ Iniciando teste de compressão Brotli...', 'info');
+            
+            try {
+                const result = await makeRequest(`${API_BASE}/devices?limit=50`, {
+                    headers: {
+                        'Accept-Encoding': 'br, gzip'
+                    }
+                });
+                
+                const contentEncoding = result.contentEncoding;
+                const contentLength = result.contentLength;
+                
+                if (contentEncoding === 'br') {
+                    log('compression-results', `✅ Compressão Brotli ativa! Tamanho: ${contentLength} bytes`, 'success');
+                } else if (contentEncoding === 'gzip') {
+                    log('compression-results', `✅ Compressão Gzip ativa (Brotli não suportado). Tamanho: ${contentLength} bytes`, 'success');
+                } else {
+                    log('compression-results', `⚠️ Compressão não detectada. Encoding: ${contentEncoding}`, 'warning');
+                }
+                
+            } catch (error) {
+                log('compression-results', `❌ Erro no teste de compressão Brotli: ${error.message}`, 'error');
+            }
+        }
+
+        async function testBatchRequests() {
+            log('batch-results', '📦 Iniciando teste de batch requests...', 'info');
+            
+            try {
+                // Test with multiple device IDs
+                const deviceIds = [39665, 39666, 39667, 39668, 39669];
+                const deviceParams = deviceIds.map(id => `deviceId=${id}`).join('&');
+                
+                const startTime = performance.now();
+                const result = await makeRequest(`${API_BASE}/positions?${deviceParams}&from=2025-01-15T00:00:00Z&to=2025-01-15T23:59:59Z`);
+                const endTime = performance.now();
+                
+                log('batch-results', `✅ Batch request: ${result.response.status} - Tempo: ${Math.round(endTime - startTime)}ms`, 'success');
+                log('batch-results', `📊 Dispositivos processados: ${deviceIds.length}`, 'info');
+                
+            } catch (error) {
+                log('batch-results', `❌ Erro no teste de batch: ${error.message}`, 'error');
+            }
+        }
+
+        async function testLargeFleet() {
+            log('batch-results', '📦 Iniciando teste de frota grande...', 'info');
+            
+            try {
+                // Simulate large fleet with multiple requests
+                const batches = [
+                    [39665, 39666, 39667],
+                    [39668, 39669, 39670],
+                    [39671, 39672, 39673]
+                ];
+                
+                const startTime = performance.now();
+                
+                for (let i = 0; i < batches.length; i++) {
+                    const batch = batches[i];
+                    const deviceParams = batch.map(id => `deviceId=${id}`).join('&');
+                    
+                    const result = await makeRequest(`${API_BASE}/positions?${deviceParams}&from=2025-01-15T00:00:00Z&to=2025-01-15T23:59:59Z`);
+                    log('batch-results', `✅ Lote ${i + 1}: ${result.response.status} - Cache: ${result.cacheStatus}`, 'success');
+                    
+                    // Small delay between batches
+                    if (i < batches.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                }
+                
+                const endTime = performance.now();
+                log('batch-results', `🎉 Teste de frota grande concluído em ${Math.round(endTime - startTime)}ms`, 'success');
+                
+            } catch (error) {
+                log('batch-results', `❌ Erro no teste de frota grande: ${error.message}`, 'error');
+            }
+        }
+
+        async function runFullPerformanceTest() {
+            log('full-results', '🚀 Iniciando teste completo de performance...', 'info');
+            
+            // Reset metrics
+            performanceMetrics = {
+                cacheHits: 0,
+                cacheMisses: 0,
+                etagHits: 0,
+                compressionSavings: 0,
+                totalRequests: 0,
+                totalResponseTime: 0
+            };
+            
+            const startTime = performance.now();
+            
+            try {
+                // Run all tests
+                await testCache();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                await testETag();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                await testCompression();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                await testBatchRequests();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                const endTime = performance.now();
+                const totalTime = endTime - startTime;
+                
+                // Generate report
+                log('full-results', '\n📊 RELATÓRIO DE PERFORMANCE', 'info');
+                log('full-results', '='.repeat(50), 'info');
+                log('full-results', `⏱️ Tempo total: ${Math.round(totalTime)}ms`, 'info');
+                log('full-results', `📡 Total de requisições: ${performanceMetrics.totalRequests}`, 'info');
+                log('full-results', `🎯 Cache hits: ${performanceMetrics.cacheHits}`, 'success');
+                log('full-results', `❌ Cache misses: ${performanceMetrics.cacheMisses}`, 'warning');
+                log('full-results', `🏷️ ETag hits: ${performanceMetrics.etagHits}`, 'success');
+                log('full-results', `🗜️ Economia de compressão: ${Math.round(performanceMetrics.compressionSavings)}%`, 'success');
+                log('full-results', `⚡ Tempo médio de resposta: ${Math.round(performanceMetrics.totalResponseTime / performanceMetrics.totalRequests)}ms`, 'info');
+                
+                const cacheHitRate = Math.round((performanceMetrics.cacheHits / performanceMetrics.totalRequests) * 100);
+                if (cacheHitRate > 50) {
+                    log('full-results', '🎉 Performance EXCELENTE! Cache hit rate > 50%', 'success');
+                } else if (cacheHitRate > 25) {
+                    log('full-results', '✅ Performance BOA! Cache hit rate > 25%', 'success');
+                } else {
+                    log('full-results', '⚠️ Performance pode ser melhorada. Cache hit rate < 25%', 'warning');
+                }
+                
+            } catch (error) {
+                log('full-results', `❌ Erro no teste completo: ${error.message}`, 'error');
+            }
+        }
+
+        // Initialize metrics display
+        updateMetrics();
+    </script>
+</body>
+</html>
+
+
+

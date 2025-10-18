@@ -7,3 +7,8 @@ compatibility_date = "2024-12-01"
 TARGET_API_BASE = "http://35.230.168.225:8082/api"
 # Fallback proxy URL (Netlify)
 FALLBACK_PROXY_URL = "https://dashboard-trackmax.netlify.app/.netlify/functions/proxy"
+
+# KV namespace for caching
+[[kv_namespaces]]
+binding = "CACHE_KV"
+id = "51ba81c06c8d4198ba7f64b2d80f62f2"

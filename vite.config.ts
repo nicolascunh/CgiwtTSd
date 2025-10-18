@@ -9,6 +9,7 @@ export default defineConfig({
     // Expose environment variables to the client
     'process.env.VITE_GOOGLE_MAPS_API_KEY': JSON.stringify(process.env.VITE_GOOGLE_MAPS_API_KEY),
     'process.env.VITE_API_URL': JSON.stringify(process.env.VITE_API_URL),
+    'process.env.VITE_TRACKMAX_PROXY_URL': JSON.stringify(process.env.VITE_TRACKMAX_PROXY_URL || '/api'),
   },
   build: {
     outDir: 'dist',

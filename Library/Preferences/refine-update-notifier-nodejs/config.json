@@ -1,34 +1,7 @@
 {
-	"key": "QHJlZmluZWRldi9hbnRkQDUuNDYuMyxAcmVmaW5lZGV2L2NsaUAyLjE2LjQ3LEByZWZpbmVkZXYvY29yZUA0LjU3LjExLEByZWZpbmVkZXYvZ3JhcGhxbEA3LjEuMyxAcmVmaW5lZGV2L3JlYWN0LXJvdXRlckAxLjAuMSxAcmVmaW5lZGV2L3NpbXBsZS1yZXN0QDUuMC4xMQ==",
-	"lastUpdated": 1760055513540,
+	"key": "QHJlZmluZWRldi9hbnRkQDYuMC4yLEByZWZpbmVkZXYvY2xpQDIuMTYuNDksQHJlZmluZWRldi9jb3JlQDUuMC40LEByZWZpbmVkZXYvZ3JhcGhxbEA3LjEuMyxAcmVmaW5lZGV2L3JlYWN0LXJvdXRlckAyLjAuMSxAcmVmaW5lZGV2L3NpbXBsZS1yZXN0QDYuMC4w",
+	"lastUpdated": 1760583917778,
 	"packages": [
-		{
-			"current": "5.46.3",
-			"wanted": "6.0.2",
-			"latest": "6.0.2",
-			"dependent": "CgiwtTSd",
-			"location": "/Users/nicolascunha/Downloads/CgiwtTSd/node_modules/@refinedev/antd",
-			"name": "@refinedev/antd",
-			"changelog": "https://c.refine.dev/antd"
-		},
-		{
-			"current": "2.16.47",
-			"wanted": "2.16.49",
-			"latest": "2.16.49",
-			"dependent": "CgiwtTSd",
-			"location": "/Users/nicolascunha/Downloads/CgiwtTSd/node_modules/@refinedev/cli",
-			"name": "@refinedev/cli",
-			"changelog": "https://c.refine.dev/cli"
-		},
-		{
-			"current": "4.57.11",
-			"wanted": "5.0.4",
-			"latest": "5.0.4",
-			"dependent": "CgiwtTSd",
-			"location": "/Users/nicolascunha/Downloads/CgiwtTSd/node_modules/@refinedev/core",
-			"name": "@refinedev/core",
-			"changelog": "https://c.refine.dev/core"
-		},
 		{
 			"current": "7.1.3",
 			"wanted": "7.1.3",
@@ -39,22 +12,13 @@
 			"changelog": "https://c.refine.dev/graphql"
 		},
 		{
-			"current": "1.0.1",
-			"wanted": "2.0.1",
-			"latest": "2.0.1",
+			"current": "2.0.1",
+			"wanted": "2.0.2",
+			"latest": "2.0.2",
 			"dependent": "CgiwtTSd",
 			"location": "/Users/nicolascunha/Downloads/CgiwtTSd/node_modules/@refinedev/react-router",
 			"name": "@refinedev/react-router",
 			"changelog": "https://c.refine.dev/react-router"
-		},
-		{
-			"current": "5.0.11",
-			"wanted": "6.0.0",
-			"latest": "6.0.0",
-			"dependent": "CgiwtTSd",
-			"location": "/Users/nicolascunha/Downloads/CgiwtTSd/node_modules/@refinedev/simple-rest",
-			"name": "@refinedev/simple-rest",
-			"changelog": "https://c.refine.dev/simple-rest"
 		}
 	]
 }

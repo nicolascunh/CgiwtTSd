@@ -1,5 +1,47 @@
 /* Dashboard Animations and Styles */
 
+/* Custom Scroll Styles */
+.custom-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: #d9d9d9 #f0f0f0;
+}
+
+.custom-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scroll-container::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 3px;
+}
+
+.custom-scroll-container::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+  transition: background 0.3s ease;
+}
+
+.custom-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+/* Dark theme scroll styles */
+[data-theme="dark"] .custom-scroll-container {
+  scrollbar-color: #4a4a4a #2a2a2a;
+}
+
+[data-theme="dark"] .custom-scroll-container::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+[data-theme="dark"] .custom-scroll-container::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+}
+
+[data-theme="dark"] .custom-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+}
+
 /* Drawer/Sidebar Animations */
 .custom-menu .ant-menu-item {
   margin: 4px 8px;

@@ -4,15 +4,14 @@
   "description": "TrackMax - Sistema de Rastreamento GPS",
   "type": "module",
   "scripts": {
-    "dev": "refine dev",
-    "start": "refine start",
-    "build": "tsc && refine build",
-    "build:firebase": "tsc && refine build && npm run copy-manifest",
+    "dev": "vite",
+    "start": "vite preview",
+    "build": "tsc && vite build",
+    "build:firebase": "tsc && vite build && npm run copy-manifest",
     "copy-manifest": "cp public/manifest.json dist/",
     "deploy": "npm run build:firebase && firebase deploy",
     "deploy:hosting": "npm run build:firebase && firebase deploy --only hosting",
     "firebase:init": "firebase init hosting",
-    "refine": "refine",
     "shadcn": "shadcn-ui"
   },
   "browserslist": {
@@ -27,6 +26,10 @@
       "last 1 safari version"
     ]
   },
+  "resolutions": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
   "dependencies": {
     "@ant-design/icons": "^5.1.1",
     "@netlify/functions": "^5.0.0",
@@ -34,10 +37,10 @@
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "^1.2.3",
     "@refinedev/antd": "^6.0.2",
-    "@refinedev/cli": "^2.16.49",
     "@refinedev/core": "^5.0.4",
     "@refinedev/graphql": "^7.1.3",
     "@refinedev/react-router": "^2.0.1",
@@ -53,8 +56,8 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.545.0",
     "query-string": "^7.1.1",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "react-leaflet": "^4.2.1",
     "react-router": "^7",
     "socket.io-client": "^4.8.1",
@@ -63,8 +66,8 @@
   },
   "devDependencies": {
     "@types/node": "20.17.17",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.1",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",

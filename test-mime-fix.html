@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Correção MIME Type</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-success {
+            border-left: 4px solid #28a745;
+        }
+        .status-error {
+            border-left: 4px solid #dc3545;
+        }
+        .status-warning {
+            border-left: 4px solid #ffc107;
+        }
+        .status-info {
+            border-left: 4px solid #17a2b8;
+        }
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin-bottom: 4px;
+            padding: 4px;
+            border-radius: 2px;
+        }
+        .log-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .log-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .log-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .log-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #f5f5f5;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+        .iframe-container {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .iframe-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Teste - Correção MIME Type</h1>
+        <p>Verificando se o erro de MIME type foi corrigido.</p>
+        
+        <h2 class="section-title">🌐 Teste de Módulos JavaScript</h2>
+        
+        <div class="status-card" id="mimeStatus">
+            <div class="status-header">
+                <div class="status-icon">📄</div>
+                <div class="status-title">Verificação de MIME Types</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="testMimeTypes()">Testar MIME Types</button>
+                <button class="btn btn-success" onclick="testAppLoad()">Testar Carregamento</button>
+                <button class="btn btn-primary" onclick="clearLogs()">Limpar Logs</button>
+            </div>
+            <div class="log-container" id="mimeLog"></div>
+        </div>
+
+        <div class="status-card" id="appStatus">
+            <div class="status-header">
+                <div class="status-icon">🏠</div>
+                <div class="status-title">Aplicação TrackMax</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-success" onclick="loadApp()">Carregar Aplicação</button>
+                <button class="btn btn-primary" onclick="refreshApp()">Atualizar</button>
+            </div>
+            <div class="iframe-container" id="appFrame" style="display: none;">
+                <iframe id="appIframe" src="about:blank"></iframe>
+            </div>
+        </div>
+
+        <div class="status-card" id="filesStatus">
+            <div class="status-header">
+                <div class="status-icon">📁</div>
+                <div class="status-title">Arquivos Estáticos</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-success" onclick="testStaticFiles()">Testar Arquivos</button>
+                <button class="btn btn-primary" onclick="testHeaders()">Testar Headers</button>
+            </div>
+            <div class="log-container" id="filesLog"></div>
+        </div>
+    </div>
+
+    <script>
+        const APP_URL = 'https://dashboard-trackmax-web.web.app';
+
+        function log(message, type = 'info', containerId = 'mimeLog') {
+            const container = document.getElementById(containerId);
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(cardId, status) {
+            const card = document.getElementById(cardId);
+            card.className = `status-card status-${status}`;
+        }
+
+        async function testMimeTypes() {
+            log('📄 Testando MIME types dos arquivos JavaScript...', 'info');
+            updateStatus('mimeStatus', 'info');
+            
+            const jsFiles = [
+                '/assets/index-BXc0kQ-O-v3.js',
+                '/assets/vendor-CC_ZIGTP-v3.js',
+                '/assets/maps-DTYD6xTZ-v3.js',
+                '/assets/antd-WfG2AWot-v3.js'
+            ];
+            
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const file of jsFiles) {
+                try {
+                    const response = await fetch(`${APP_URL}${file}`);
+                    const contentType = response.headers.get('content-type');
+                    
+                    if (contentType && contentType.includes('application/javascript')) {
+                        log(`✅ ${file}: MIME type correto (${contentType})`, 'success');
+                        successCount++;
+                    } else {
+                        log(`❌ ${file}: MIME type incorreto (${contentType})`, 'error');
+                        errorCount++;
+                    }
+                } catch (error) {
+                    log(`💥 ${file}: Erro ao verificar (${error.message})`, 'error');
+                    errorCount++;
+                }
+            }
+            
+            if (errorCount === 0) {
+                log(`✅ Todos os arquivos JavaScript têm MIME type correto!`, 'success');
+                updateStatus('mimeStatus', 'success');
+            } else {
+                log(`❌ ${errorCount} arquivos com MIME type incorreto`, 'error');
+                updateStatus('mimeStatus', 'error');
+            }
+        }
+
+        async function testAppLoad() {
+            log('🏠 Testando carregamento da aplicação...', 'info');
+            updateStatus('appStatus', 'info');
+            
+            try {
+                const response = await fetch(APP_URL);
+                if (response.ok) {
+                    log('✅ Aplicação acessível', 'success');
+                    updateStatus('appStatus', 'success');
+                    
+                    const html = await response.text();
+                    if (html.includes('TrackMax') || html.includes('dashboard')) {
+                        log('✅ Conteúdo da aplicação detectado', 'success');
+                    } else {
+                        log('⚠️ Conteúdo da aplicação não detectado', 'warning');
+                    }
+                } else {
+                    log(`❌ Erro ao acessar aplicação: ${response.status}`, 'error');
+                    updateStatus('appStatus', 'error');
+                }
+            } catch (error) {
+                log(`💥 Erro ao acessar aplicação: ${error.message}`, 'error');
+                updateStatus('appStatus', 'error');
+            }
+        }
+
+        function loadApp() {
+            log('🖥️ Carregando aplicação no iframe...', 'info');
+            const iframe = document.getElementById('appIframe');
+            const container = document.getElementById('appFrame');
+            
+            iframe.src = APP_URL;
+            container.style.display = 'block';
+            updateStatus('appStatus', 'info');
+            
+            iframe.onload = () => {
+                log('✅ Aplicação carregada no iframe', 'success');
+                updateStatus('appStatus', 'success');
+            };
+            
+            iframe.onerror = () => {
+                log('❌ Erro ao carregar aplicação no iframe', 'error');
+                updateStatus('appStatus', 'error');
+            };
+        }
+
+        function refreshApp() {
+            log('🔄 Atualizando aplicação...', 'info');
+            const iframe = document.getElementById('appIframe');
+            iframe.src = iframe.src;
+        }
+
+        async function testStaticFiles() {
+            log('📁 Testando arquivos estáticos...', 'info');
+            updateStatus('filesStatus', 'info');
+            
+            const files = [
+                { path: '/index.html', expectedType: 'text/html' },
+                { path: '/assets/index-ZpqSylZO-v3.css', expectedType: 'text/css' },
+                { path: '/assets/index-BXc0kQ-O-v3.js', expectedType: 'application/javascript' },
+                { path: '/assets/vendor-CC_ZIGTP-v3.js', expectedType: 'application/javascript' }
+            ];
+            
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const file of files) {
+                try {
+                    const response = await fetch(`${APP_URL}${file.path}`);
+                    const contentType = response.headers.get('content-type');
+                    
+                    if (contentType && contentType.includes(file.expectedType)) {
+                        log(`✅ ${file.path}: ${contentType}`, 'success');
+                        successCount++;
+                    } else {
+                        log(`❌ ${file.path}: Esperado ${file.expectedType}, recebido ${contentType}`, 'error');
+                        errorCount++;
+                    }
+                } catch (error) {
+                    log(`💥 ${file.path}: Erro (${error.message})`, 'error');
+                    errorCount++;
+                }
+            }
+            
+            if (errorCount === 0) {
+                log(`✅ Todos os arquivos estáticos têm MIME type correto!`, 'success');
+                updateStatus('filesStatus', 'success');
+            } else {
+                log(`❌ ${errorCount} arquivos com MIME type incorreto`, 'error');
+                updateStatus('filesStatus', 'error');
+            }
+        }
+
+        async function testHeaders() {
+            log('📋 Testando headers de cache...', 'info');
+            
+            try {
+                const response = await fetch(`${APP_URL}/assets/index-BXc0kQ-O-v3.js`);
+                const cacheControl = response.headers.get('cache-control');
+                const contentType = response.headers.get('content-type');
+                
+                log(`📋 Cache-Control: ${cacheControl}`, 'info');
+                log(`📋 Content-Type: ${contentType}`, 'info');
+                
+                if (cacheControl && cacheControl.includes('max-age')) {
+                    log('✅ Cache configurado corretamente', 'success');
+                } else {
+                    log('⚠️ Cache pode não estar configurado', 'warning');
+                }
+            } catch (error) {
+                log(`💥 Erro ao verificar headers: ${error.message}`, 'error');
+            }
+        }
+
+        function clearLogs() {
+            const containers = ['mimeLog', 'filesLog'];
+            containers.forEach(id => {
+                document.getElementById(id).innerHTML = '';
+            });
+            log('🧹 Logs limpos', 'info');
+        }
+
+        // Executar teste automático
+        window.addEventListener('load', async () => {
+            log('🚀 Iniciando teste automático de MIME types...', 'info');
+            
+            await testMimeTypes();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            await testStaticFiles();
+            
+            log('✅ Teste automático concluído', 'success');
+        });
+        
+        console.log('🔧 Teste de MIME types iniciado');
+        console.log('🏠 App URL:', APP_URL);
+    </script>
+</body>
+</html>
+
+
+

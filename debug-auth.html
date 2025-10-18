@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Autenticação</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+        .credentials { display: flex; gap: 10px; margin: 10px 0; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Debug Autenticação TrackMax</h1>
+    
+    <div class="test">
+        <h3>Estado Atual do localStorage</h3>
+        <button onclick="checkLocalStorage()">Verificar localStorage</button>
+        <div id="localStorageStatus"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Teste de Login</h3>
+        <div class="credentials">
+            <input type="text" id="username" placeholder="Usuário" value="admin">
+            <input type="password" id="password" placeholder="Senha" value="admin">
+            <button onclick="testLogin()">Testar Login</button>
+        </div>
+        <div id="loginResult"></div>
+    </div>
+    
+    <div class="test">
+        <h3>Teste de API com Credenciais Salvas</h3>
+        <button onclick="testApiWithSavedCredentials()">Testar API</button>
+        <div id="apiResult"></div>
+    </div>
+
+    <script>
+        const CLOUDFLARE_WORKER_URL = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        
+        function checkLocalStorage() {
+            const resultDiv = document.getElementById('localStorageStatus');
+            
+            const authCredentials = localStorage.getItem("auth-credentials");
+            const authUser = localStorage.getItem("auth-user");
+            
+            let html = '<h4>Estado do localStorage:</h4>';
+            html += `<p><strong>auth-credentials:</strong> ${authCredentials ? 'Presente' : 'Ausente'}</p>`;
+            html += `<p><strong>auth-user:</strong> ${authUser || 'Ausente'}</p>`;
+            
+            if (authCredentials) {
+                html += `<p><strong>Credenciais decodificadas:</strong> ${atob(authCredentials)}</p>`;
+            }
+            
+            html += '<h4>Todo o localStorage:</h4>';
+            html += '<pre>' + JSON.stringify(localStorage, null, 2) + '</pre>';
+            
+            resultDiv.innerHTML = html;
+        }
+        
+        async function testLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('loginResult');
+            
+            if (!username || !password) {
+                resultDiv.innerHTML = '<div class="error">❌ Por favor, preencha usuário e senha</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = 'Testando login...';
+            
+            try {
+                const credentials = btoa(`${username}:${password}`);
+                
+                // Simular o processo de login da aplicação
+                const serverResponse = await fetch(`${CLOUDFLARE_WORKER_URL}/server`, {
+                    headers: { 'Authorization': `Basic ${credentials}` }
+                });
+                
+                const devicesResponse = await fetch(`${CLOUDFLARE_WORKER_URL}/devices?limit=1`, {
+                    headers: { 'Authorization': `Basic ${credentials}` }
+                });
+                
+                console.log('Server response:', serverResponse.status);
+                console.log('Devices response:', devicesResponse.status);
+                
+                if (serverResponse.ok || devicesResponse.ok) {
+                    // Salvar credenciais como a aplicação faz
+                    localStorage.setItem("auth-credentials", credentials);
+                    localStorage.setItem("auth-user", username);
+                    
+                    let result = '<div class="success">✅ Login bem-sucedido!</div>';
+                    result += `<p>Server: ${serverResponse.ok ? '✅' : '❌'}</p>`;
+                    result += `<p>Devices: ${devicesResponse.ok ? '✅' : '❌'}</p>`;
+                    result += `<p>Credenciais salvas no localStorage</p>`;
+                    
+                    resultDiv.innerHTML = result;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ Login falhou - credenciais inválidas</div>';
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Erro: ${error.message}</div>`;
+            }
+        }
+        
+        async function testApiWithSavedCredentials() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = 'Testando API com credenciais salvas...';
+            
+            const authCredentials = localStorage.getItem("auth-credentials");
+            
+            if (!authCredentials) {
+                resultDiv.innerHTML = '<div class="error">❌ Nenhuma credencial salva no localStorage</div>';
+                return;
+            }
+            
+            try {
+                // Testar /api/devices com credenciais salvas
+                const response = await fetch(`${CLOUDFLARE_WORKER_URL}/devices?limit=5`, {
+                    headers: { 'Authorization': `Basic ${authCredentials}` }
+                });
+                
+                console.log('API response:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `<div class="success">✅ API funcionando! Encontrados ${data.length} dispositivos</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ API retornou erro ${response.status}</div>`;
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Erro: ${error.message}</div>`;
+            }
+        }
+        
+        // Verificar localStorage ao carregar a página
+        window.onload = function() {
+            checkLocalStorage();
+        };
+    </script>
+</body>
+</html>
+
+
+

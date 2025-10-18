@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Typography, Button, Space } from 'antd';
 import { useNavigate } from 'react-router';
+import { getApiUrlSync } from '../config/api';
 
 const { Title, Text } = Typography;
 
@@ -11,22 +12,30 @@ export const DebugPage: React.FC = () => {
 
   useEffect(() => {
     const checkAuth = () => {
-      const credentials = localStorage.getItem('auth-credentials');
       const user = localStorage.getItem('auth-user');
-      
-      if (credentials && user) {
-        setAuthStatus(`Authenticated as: ${user}`);
-      } else {
-        setAuthStatus('Not authenticated');
-      }
+
+      fetch(`${getApiUrlSync()}/server`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+        .then((response) => {
+          if (response.ok) {
+            setAuthStatus(user ? `Authenticated as: ${user}` : 'Authenticated (no cached user)');
+          } else {
+            setAuthStatus('Not authenticated');
+          }
+        })
+        .catch(() => setAuthStatus('Session check failed'));
     };
 
     checkAuth();
   }, []);
 
   const clearAuth = () => {
-    localStorage.removeItem('auth-credentials');
+    // Para Basic Auth, apenas limpar localStorage
     localStorage.removeItem('auth-user');
+    localStorage.removeItem('auth-credentials');
+    localStorage.removeItem('auth-basic');
     setAuthStatus('Auth cleared');
   };
 
@@ -48,7 +57,6 @@ export const DebugPage: React.FC = () => {
           <Text strong>LocalStorage Contents:</Text>
           <pre style={{ background: '#f5f5f5', padding: '10px', borderRadius: '4px' }}>
             {JSON.stringify({
-              'auth-credentials': localStorage.getItem('auth-credentials') ? '***' : null,
               'auth-user': localStorage.getItem('auth-user'),
             }, null, 2)}
           </pre>

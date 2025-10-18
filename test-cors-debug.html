@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste CORS Debug - Netlify Proxy</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .warning { color: #ffc107; }
+        .info { color: #17a2b8; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .credentials-input {
+            margin: 10px 0;
+        }
+        .credentials-input input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Teste CORS Debug - Netlify Proxy</h1>
+        <p>Testando configuração CORS do proxy Netlify para header Authorization</p>
+        
+        <div class="credentials-input">
+            <label>Usuário: <input type="text" id="username" value="ndev" placeholder="Usuário"></label>
+            <label>Senha: <input type="password" id="password" value="2025" placeholder="Senha"></label>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="test-section">
+            <h3>1. Teste OPTIONS (Preflight)</h3>
+            <button onclick="testPreflight()">Testar Preflight CORS</button>
+            <div id="preflight-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>2. Teste GET com Authorization</h3>
+            <button onclick="testGetWithAuth()">Testar GET /server com Basic Auth</button>
+            <div id="get-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>3. Teste POST com Authorization</h3>
+            <button onclick="testPostWithAuth()">Testar POST /server com Basic Auth</button>
+            <div id="post-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>4. Teste Direto Traccar (sem proxy)</h3>
+            <button onclick="testDirectTraccar()">Testar Traccar Direto</button>
+            <div id="direct-result"></div>
+        </div>
+    </div>
+
+    <script>
+        const NETLIFY_PROXY_URL = 'https://dashboard-trackmax.netlify.app/api';
+        const DIRECT_TRACCAR_URL = 'http://35.230.168.225:8082/api';
+
+        function getCredentials() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            return btoa(`${username}:${password}`);
+        }
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info';
+            element.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        }
+
+        function clearLog(elementId) {
+            document.getElementById(elementId).innerHTML = '';
+        }
+
+        async function testPreflight() {
+            clearLog('preflight-result');
+            log('preflight-result', '🔄 Testando preflight CORS...', 'info');
+
+            try {
+                const response = await fetch(`${NETLIFY_PROXY_URL}/server`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Access-Control-Request-Method': 'GET',
+                        'Access-Control-Request-Headers': 'authorization, content-type',
+                        'Origin': window.location.origin
+                    }
+                });
+
+                log('preflight-result', `Status: ${response.status}`, response.status === 204 ? 'success' : 'error');
+                
+                // Verificar headers CORS
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers'),
+                    'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials')
+                };
+
+                log('preflight-result', 'Headers CORS recebidos:', 'info');
+                log('preflight-result', `<pre>${JSON.stringify(corsHeaders, null, 2)}</pre>`, 'info');
+
+                if (corsHeaders['Access-Control-Allow-Headers'] && 
+                    corsHeaders['Access-Control-Allow-Headers'].toLowerCase().includes('authorization')) {
+                    log('preflight-result', '✅ Authorization header permitido!', 'success');
+                } else {
+                    log('preflight-result', '❌ Authorization header NÃO permitido!', 'error');
+                }
+
+            } catch (error) {
+                log('preflight-result', `❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function testGetWithAuth() {
+            clearLog('get-result');
+            log('get-result', '🔄 Testando GET com Authorization...', 'info');
+
+            try {
+                const credentials = getCredentials();
+                const response = await fetch(`${NETLIFY_PROXY_URL}/server`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('get-result', `Status: ${response.status}`, response.status === 200 ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('get-result', '✅ GET com Authorization funcionou!', 'success');
+                    log('get-result', `<pre>${JSON.stringify(data, null, 2)}</pre>`, 'info');
+                } else {
+                    const errorText = await response.text();
+                    log('get-result', `❌ Erro ${response.status}: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('get-result', `❌ Erro: ${error.message}`, 'error');
+                if (error.message.includes('CORS')) {
+                    log('get-result', '💡 Erro CORS detectado - verifique configuração do proxy', 'warning');
+                }
+            }
+        }
+
+        async function testPostWithAuth() {
+            clearLog('post-result');
+            log('post-result', '🔄 Testando POST com Authorization...', 'info');
+
+            try {
+                const credentials = getCredentials();
+                const response = await fetch(`${NETLIFY_PROXY_URL}/server`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ test: 'data' })
+                });
+
+                log('post-result', `Status: ${response.status}`, response.status < 400 ? 'success' : 'error');
+                
+                const responseText = await response.text();
+                log('post-result', `Resposta: ${responseText}`, 'info');
+
+            } catch (error) {
+                log('post-result', `❌ Erro: ${error.message}`, 'error');
+                if (error.message.includes('CORS')) {
+                    log('post-result', '💡 Erro CORS detectado - verifique configuração do proxy', 'warning');
+                }
+            }
+        }
+
+        async function testDirectTraccar() {
+            clearLog('direct-result');
+            log('direct-result', '🔄 Testando Traccar direto (sem proxy)...', 'info');
+
+            try {
+                const credentials = getCredentials();
+                const response = await fetch(`${DIRECT_TRACCAR_URL}/server`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('direct-result', `Status: ${response.status}`, response.status === 200 ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('direct-result', '✅ Traccar direto funcionou!', 'success');
+                    log('direct-result', `<pre>${JSON.stringify(data, null, 2)}</pre>`, 'info');
+                } else {
+                    const errorText = await response.text();
+                    log('direct-result', `❌ Erro ${response.status}: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('direct-result', `❌ Erro: ${error.message}`, 'error');
+                if (error.message.includes('CORS')) {
+                    log('direct-result', '💡 Erro CORS esperado - Traccar não tem CORS configurado', 'warning');
+                }
+            }
+        }
+
+        // Teste automático ao carregar
+        window.addEventListener('load', () => {
+            log('preflight-result', '🚀 Página carregada. Clique nos botões para testar.', 'info');
+        });
+    </script>
+</body>
+</html>
+
+
+

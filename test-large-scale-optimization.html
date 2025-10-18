@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Otimização para Grande Escala</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .optimization-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .optimization-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .optimization-icon {
+            font-size: 24px;
+            margin-right: 12px;
+        }
+        .optimization-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .optimization-description {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.4;
+            margin-bottom: 12px;
+        }
+        .optimization-details {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #666;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .comparison-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .before {
+            background-color: #ffebee;
+        }
+        .after {
+            background-color: #e8f5e8;
+        }
+        .improvement {
+            background-color: #fff3e0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Teste - Otimização para Grande Escala (2000+ Dispositivos)</h1>
+        <p>Este teste demonstra as otimizações implementadas para lidar com grandes escalas de dispositivos.</p>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalDevices">2000+</div>
+                <div class="stat-label">Dispositivos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="batchSize">5</div>
+                <div class="stat-label">Dispositivos por Lote</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="delayBetweenBatches">5s</div>
+                <div class="stat-label">Delay Entre Lotes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalBatches">400+</div>
+                <div class="stat-label">Total de Lotes</div>
+            </div>
+        </div>
+
+        <h2 class="section-title">🔧 Otimizações Implementadas</h2>
+        
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">📊</div>
+                <div class="optimization-title">Detecção Automática de Escala</div>
+            </div>
+            <div class="optimization-description">
+                O sistema detecta automaticamente o número de dispositivos e ajusta os parâmetros de processamento.
+            </div>
+            <div class="optimization-details">
+                <strong>Lógica:</strong><br>
+                • ≤ 500 dispositivos: Lotes de 20, delay de 2s<br>
+                • 500-1000 dispositivos: Lotes de 10, delay de 3s<br>
+                • 1000+ dispositivos: Lotes de 5, delay de 5s
+            </div>
+        </div>
+
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">⏱️</div>
+                <div class="optimization-title">Delays Inteligentes</div>
+            </div>
+            <div class="optimization-description">
+                Sistema de delays progressivos para evitar rate limiting (HTTP 429).
+            </div>
+            <div class="optimization-details">
+                <strong>Delays por Escala:</strong><br>
+                • Escala Normal: 2 segundos entre lotes<br>
+                • Escala Média: 3 segundos entre lotes<br>
+                • Grande Escala: 5 segundos entre lotes<br>
+                • Retry 429: 5s + 3s por tentativa
+            </div>
+        </div>
+
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">🔄</div>
+                <div class="optimization-title">Sistema de Retry Melhorado</div>
+            </div>
+            <div class="optimization-description">
+                Retry com backoff exponencial otimizado para grandes escalas.
+            </div>
+            <div class="optimization-details">
+                <strong>Estratégia de Retry:</strong><br>
+                • Erro 429: 5s base + 3s por tentativa<br>
+                • Erro 500: 2s base + backoff exponencial<br>
+                • Erro de Rede: 2s base + backoff exponencial<br>
+                • Máximo: 3 tentativas por requisição
+            </div>
+        </div>
+
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">📱</div>
+                <div class="optimization-title">Interface de Progresso</div>
+            </div>
+            <div class="optimization-description">
+                Componente visual para mostrar progresso em tempo real durante processamento de grande escala.
+            </div>
+            <div class="optimization-details">
+                <strong>Funcionalidades:</strong><br>
+                • Progresso geral e por lotes<br>
+                • Tempo estimado restante<br>
+                • Operação atual<br>
+                • Lista de erros<br>
+                • Botões de retry e cancelar
+            </div>
+        </div>
+
+        <h2 class="section-title">📊 Comparação: Antes vs Depois</h2>
+        
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th>Aspecto</th>
+                    <th>Antes (Problema)</th>
+                    <th>Depois (Otimizado)</th>
+                    <th>Melhoria</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Lotes de Requisição</strong></td>
+                    <td class="before">20 dispositivos por lote</td>
+                    <td class="after">5 dispositivos por lote (grande escala)</td>
+                    <td class="improvement">75% redução no tamanho do lote</td>
+                </tr>
+                <tr>
+                    <td><strong>Delay Entre Lotes</strong></td>
+                    <td class="before">2 segundos fixos</td>
+                    <td class="after">5 segundos (grande escala)</td>
+                    <td class="improvement">150% aumento no delay</td>
+                </tr>
+                <tr>
+                    <td><strong>Retry para 429</strong></td>
+                    <td class="before">2s base + backoff</td>
+                    <td class="after">5s base + 3s por tentativa</td>
+                    <td class="improvement">250% aumento no delay de retry</td>
+                </tr>
+                <tr>
+                    <td><strong>Feedback Visual</strong></td>
+                    <td class="before">Nenhum</td>
+                    <td class="after">Progresso completo em tempo real</td>
+                    <td class="improvement">100% novo</td>
+                </tr>
+                <tr>
+                    <td><strong>Tratamento de Erros</strong></td>
+                    <td class="before">Falha silenciosa</td>
+                    <td class="after">Lista de erros + retry</td>
+                    <td class="improvement">100% novo</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2 class="section-title">🎯 Benefícios para Grande Escala</h2>
+        
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">✅</div>
+                <div class="optimization-title">Redução de Erros 429</div>
+            </div>
+            <div class="optimization-description">
+                Com lotes menores e delays maiores, a probabilidade de rate limiting é drasticamente reduzida.
+            </div>
+        </div>
+
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">⚡</div>
+                <div class="optimization-title">Processamento Confiável</div>
+            </div>
+            <div class="optimization-description">
+                Sistema continua processando mesmo com falhas parciais, garantindo que todos os dispositivos sejam processados.
+            </div>
+        </div>
+
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">👥</div>
+                <div class="optimization-title">Experiência do Usuário</div>
+            </div>
+            <div class="optimization-description">
+                Interface clara mostra progresso e permite controle do usuário durante processamento longo.
+            </div>
+        </div>
+
+        <div class="optimization-card">
+            <div class="optimization-header">
+                <div class="optimization-icon">🔧</div>
+                <div class="optimization-title">Manutenibilidade</div>
+            </div>
+            <div class="optimization-description">
+                Sistema se adapta automaticamente a diferentes escalas sem necessidade de configuração manual.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simular dados de grande escala
+        const totalDevices = 2000;
+        const batchSize = 5;
+        const delayBetweenBatches = 5000;
+        const totalBatches = Math.ceil(totalDevices / batchSize);
+        
+        // Atualizar estatísticas
+        document.getElementById('totalDevices').textContent = totalDevices.toLocaleString();
+        document.getElementById('batchSize').textContent = batchSize;
+        document.getElementById('delayBetweenBatches').textContent = (delayBetweenBatches / 1000) + 's';
+        document.getElementById('totalBatches').textContent = totalBatches.toLocaleString();
+        
+        console.log('🚀 Teste de otimização para grande escala carregado');
+        console.log('📊 Total de dispositivos:', totalDevices);
+        console.log('📦 Tamanho do lote:', batchSize);
+        console.log('⏱️ Delay entre lotes:', delayBetweenBatches + 'ms');
+        console.log('📊 Total de lotes:', totalBatches);
+        console.log('⏱️ Tempo estimado total:', Math.round((totalBatches * delayBetweenBatches) / 1000 / 60) + ' minutos');
+    </script>
+</body>
+</html>
+
+
+

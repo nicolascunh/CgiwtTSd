@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Teste Netlify API - TrackMax</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+        .test-button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        .test-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #ecf0f1;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success { color: #27ae60; }
+        .error { color: #e74c3c; }
+        .warning { color: #f39c12; }
+        .info { color: #3498db; }
+        .credentials-input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Teste Netlify API</h1>
+        
+        <div class="test-section">
+            <h2>🔐 Credenciais de Teste</h2>
+            <input type="text" id="username" class="credentials-input" placeholder="Usuário (ex: ndev)" value="ndev">
+            <input type="password" id="password" class="credentials-input" placeholder="Senha (ex: 2025)" value="2025">
+            <button class="test-button" onclick="updateCredentials()">Atualizar Credenciais</button>
+            <div class="results" id="credentials-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🌐 Teste de CORS</h2>
+            <button class="test-button" onclick="testCORS()">Testar CORS</button>
+            <button class="test-button" onclick="testPreflight()">Testar Preflight</button>
+            <div class="results" id="cors-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📡 Teste de Endpoints</h2>
+            <button class="test-button" onclick="testServer()">Testar /server</button>
+            <button class="test-button" onclick="testDevices()">Testar /devices</button>
+            <button class="test-button" onclick="testPositions()">Testar /positions</button>
+            <div class="results" id="endpoints-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎯 Teste de Dispositivos Específicos</h2>
+            <button class="test-button" onclick="testSpecificDevices()">Testar Dispositivos do Erro</button>
+            <button class="test-button" onclick="testMultipleDevices()">Testar Múltiplos Dispositivos</button>
+            <div class="results" id="devices-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Comparação de Proxies</h2>
+            <button class="test-button" onclick="compareProxies()">Comparar Proxies</button>
+            <div class="results" id="comparison-results"></div>
+        </div>
+    </div>
+
+    <script>
+        const NETLIFY_API_URL = 'https://dashboard-trackmax.netlify.app/.netlify/functions/api';
+        const CLOUDFLARE_WORKER_URL = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        const DIRECT_API_URL = 'http://35.230.168.225:8082/api';
+
+        let currentCredentials = '';
+
+        function log(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'info';
+            element.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        function updateCredentials() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                log('credentials-results', '❌ Usuário e senha são obrigatórios', 'error');
+                return;
+            }
+            
+            currentCredentials = btoa(`${username}:${password}`);
+            log('credentials-results', `✅ Credenciais atualizadas: ${username}:${password}`, 'success');
+            log('credentials-results', `🔐 Basic Auth: ${currentCredentials}`, 'info');
+        }
+
+        async function testCORS() {
+            log('cors-results', '🌐 Testando CORS com Netlify API...', 'info');
+            
+            try {
+                const response = await fetch(`${NETLIFY_API_URL}/server`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${currentCredentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('cors-results', `📡 Status: ${response.status} ${response.statusText}`, 
+                   response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('cors-results', `✅ CORS funcionando! Dados: ${JSON.stringify(data).substring(0, 100)}...`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    log('cors-results', `❌ Erro: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('cors-results', `❌ Erro de CORS: ${error.message}`, 'error');
+            }
+        }
+
+        async function testPreflight() {
+            log('cors-results', '🔄 Testando preflight OPTIONS...', 'info');
+            
+            try {
+                const response = await fetch(`${NETLIFY_API_URL}/server`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Access-Control-Request-Method': 'GET',
+                        'Access-Control-Request-Headers': 'Authorization, Content-Type'
+                    }
+                });
+
+                log('cors-results', `📡 Preflight Status: ${response.status}`, 
+                   response.status === 204 ? 'success' : 'error');
+                
+                const corsHeaders = {
+                    'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                    'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                    'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers'),
+                    'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials')
+                };
+                
+                log('cors-results', `🔧 CORS Headers: ${JSON.stringify(corsHeaders, null, 2)}`, 'info');
+
+            } catch (error) {
+                log('cors-results', `❌ Erro preflight: ${error.message}`, 'error');
+            }
+        }
+
+        async function testServer() {
+            log('endpoints-results', '📡 Testando endpoint /server...', 'info');
+            
+            try {
+                const response = await fetch(`${NETLIFY_API_URL}/server`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${currentCredentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('endpoints-results', `📡 /server: ${response.status} ${response.statusText}`, 
+                   response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('endpoints-results', `✅ Servidor: ${data.id || 'OK'}`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    log('endpoints-results', `❌ Erro: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('endpoints-results', `❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function testDevices() {
+            log('endpoints-results', '📡 Testando endpoint /devices...', 'info');
+            
+            try {
+                const response = await fetch(`${NETLIFY_API_URL}/devices?limit=5`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${currentCredentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('endpoints-results', `📡 /devices: ${response.status} ${response.statusText}`, 
+                   response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('endpoints-results', `✅ Dispositivos: ${data.length} encontrados`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    log('endpoints-results', `❌ Erro: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('endpoints-results', `❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function testPositions() {
+            log('endpoints-results', '📡 Testando endpoint /positions...', 'info');
+            
+            try {
+                const response = await fetch(`${NETLIFY_API_URL}/positions?limit=5`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${currentCredentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('endpoints-results', `📡 /positions: ${response.status} ${response.statusText}`, 
+                   response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('endpoints-results', `✅ Posições: ${data.length} encontradas`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    log('endpoints-results', `❌ Erro: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('endpoints-results', `❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function testSpecificDevices() {
+            log('devices-results', '🎯 Testando dispositivos específicos do erro...', 'info');
+            
+            const testDevices = [30565, 29622, 44391, 43755, 37599];
+            
+            for (const deviceId of testDevices) {
+                try {
+                    const response = await fetch(`${NETLIFY_API_URL}/positions?deviceId=${deviceId}&limit=1`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Basic ${currentCredentials}`,
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    log('devices-results', `📡 Device ${deviceId}: ${response.status} ${response.statusText}`, 
+                       response.ok ? 'success' : 'error');
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        log('devices-results', `❌ Erro device ${deviceId}: ${errorText}`, 'error');
+                    }
+
+                } catch (error) {
+                    log('devices-results', `❌ Erro device ${deviceId}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testMultipleDevices() {
+            log('devices-results', '🎯 Testando múltiplos dispositivos (como no erro)...', 'info');
+            
+            try {
+                const deviceParams = 'deviceId=30565&deviceId=29622&deviceId=44391&deviceId=43755&deviceId=37599';
+                const response = await fetch(`${NETLIFY_API_URL}/positions?${deviceParams}&limit=1000`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${currentCredentials}`,
+                        'Accept': 'application/json'
+                    }
+                });
+
+                log('devices-results', `📡 Múltiplos devices: ${response.status} ${response.statusText}`, 
+                   response.ok ? 'success' : 'error');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log('devices-results', `✅ Dados recebidos: ${Array.isArray(data) ? data.length + ' posições' : 'objeto'}`, 'success');
+                    
+                    if (Array.isArray(data)) {
+                        const deviceIds = [...new Set(data.map(pos => pos.deviceId))];
+                        log('devices-results', `📊 Dispositivos com dados: ${deviceIds.join(', ')}`, 'info');
+                    }
+                } else {
+                    const errorText = await response.text();
+                    log('devices-results', `❌ Erro: ${errorText}`, 'error');
+                }
+
+            } catch (error) {
+                log('devices-results', `❌ Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function compareProxies() {
+            log('comparison-results', '📊 Comparando proxies...', 'info');
+            
+            const endpoints = [
+                { name: 'Netlify API', url: NETLIFY_API_URL },
+                { name: 'Cloudflare Worker', url: CLOUDFLARE_WORKER_URL }
+            ];
+            
+            for (const endpoint of endpoints) {
+                log('comparison-results', `\n🔍 Testando ${endpoint.name}...`, 'info');
+                
+                try {
+                    const response = await fetch(`${endpoint.url}/server`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Basic ${currentCredentials}`,
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    log('comparison-results', `📡 ${endpoint.name}: ${response.status} ${response.statusText}`, 
+                       response.ok ? 'success' : 'error');
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        log('comparison-results', `✅ ${endpoint.name}: Funcionando`, 'success');
+                    } else {
+                        const errorText = await response.text();
+                        log('comparison-results', `❌ ${endpoint.name}: ${errorText}`, 'error');
+                    }
+
+                } catch (error) {
+                    log('comparison-results', `❌ ${endpoint.name}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        // Inicializar credenciais ao carregar
+        window.onload = function() {
+            updateCredentials();
+        };
+    </script>
+</body>
+</html>
+
+
+

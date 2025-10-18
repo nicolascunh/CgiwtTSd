@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Paginação de Eventos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .event-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-left: 4px solid #007bff;
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .event-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+        }
+        .event-time {
+            font-size: 12px;
+            color: #666;
+        }
+        .event-description {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        .pagination-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 16px;
+        }
+        .pagination-info {
+            font-size: 12px;
+            color: #666;
+        }
+        .pagination-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn:hover:not(:disabled) {
+            background: #f5f5f5;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        .events-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            background: #fafafa;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 Teste - Paginação de Eventos (5 por vez)</h1>
+        <p>Este teste demonstra como os eventos são exibidos com paginação de 5 eventos por vez e scroll interno.</p>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalEvents">0</div>
+                <div class="stat-label">Total de Eventos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="currentPage">1</div>
+                <div class="stat-label">Página Atual</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalPages">0</div>
+                <div class="stat-label">Total de Páginas</div>
+            </div>
+        </div>
+
+        <h2 class="section-title">🚨 Alertas e Notificações (Paginação)</h2>
+        
+        <div class="events-container" id="eventsContainer">
+            <!-- Eventos serão inseridos aqui -->
+        </div>
+        
+        <div class="pagination-controls" id="paginationControls" style="display: none;">
+            <div class="pagination-info" id="paginationInfo">
+                Página 1 de 1 • 0 eventos
+            </div>
+            <div class="pagination-buttons">
+                <button class="btn" id="prevBtn" onclick="previousPage()" disabled>← Anterior</button>
+                <button class="btn" id="nextBtn" onclick="nextPage()" disabled>Próxima →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dados de exemplo - eventos simulados
+        const mockEvents = [
+            { id: 1, type: 'overspeed', label: 'Excesso de velocidade', icon: '🚦', time: '14:30', device: 'Veículo 001', description: 'Velocidade acima do limite configurado' },
+            { id: 2, type: 'engineBlock', label: 'Veículo bloqueado', icon: '🔒', time: '14:25', device: 'Veículo 002', description: 'Motor do veículo foi bloqueado remotamente' },
+            { id: 3, type: 'powerCut', label: 'Corte de alimentação', icon: '🔌', time: '14:20', device: 'Veículo 003', description: 'Alimentação elétrica do dispositivo foi cortada' },
+            { id: 4, type: 'geofenceEnter', label: 'Entrada em geocerca', icon: '🧱', time: '14:15', device: 'Veículo 004', description: 'Veículo entrou em uma área geocercada' },
+            { id: 5, type: 'harshBraking', label: 'Frenagem brusca', icon: '🛑', time: '14:10', device: 'Veículo 005', description: 'Detectada frenagem abrupta do veículo' },
+            { id: 6, type: 'harshAcceleration', label: 'Aceleração brusca', icon: '⚡', time: '14:05', device: 'Veículo 006', description: 'Detectada aceleração abrupta do veículo' },
+            { id: 7, type: 'harshCornering', label: 'Curva brusca', icon: '↩️', time: '14:00', device: 'Veículo 007', description: 'Detectada curva ou manobra brusca' },
+            { id: 8, type: 'idle', label: 'Motor ocioso', icon: '💤', time: '13:55', device: 'Veículo 008', description: 'Veículo está com motor ligado mas parado' },
+            { id: 9, type: 'ignitionOn', label: 'Ignição ligada', icon: '🔑', time: '13:50', device: 'Veículo 009', description: 'Motor do veículo foi ligado' },
+            { id: 10, type: 'ignitionOff', label: 'Ignição desligada', icon: '🔑', time: '13:45', device: 'Veículo 010', description: 'Motor do veículo foi desligado' },
+            { id: 11, type: 'deviceOnline', label: 'Dispositivo online', icon: '🟢', time: '13:40', device: 'Veículo 011', description: 'Dispositivo conectou-se ao servidor' },
+            { id: 12, type: 'deviceOffline', label: 'Dispositivo offline', icon: '🔴', time: '13:35', device: 'Veículo 012', description: 'Dispositivo perdeu conexão com o servidor' },
+            { id: 13, type: 'alarm', label: 'Alarme ativado', icon: '🚨', time: '13:30', device: 'Veículo 013', description: 'Alarme de segurança foi ativado' },
+            { id: 14, type: 'tampering', label: 'Tentativa de violação', icon: '🔓', time: '13:25', device: 'Veículo 014', description: 'Detectada tentativa de violação do dispositivo' },
+            { id: 15, type: 'lowBattery', label: 'Bateria baixa', icon: '🔋', time: '13:20', device: 'Veículo 015', description: 'Bateria do dispositivo está baixa' },
+            { id: 16, type: 'sOS', label: 'SOS ativado', icon: '🆘', time: '13:15', device: 'Veículo 016', description: 'Botão de emergência SOS foi ativado' },
+            { id: 17, type: 'overspeed', label: 'Excesso de velocidade', icon: '🚦', time: '13:10', device: 'Veículo 017', description: 'Velocidade acima do limite configurado' },
+            { id: 18, type: 'engineBlock', label: 'Veículo bloqueado', icon: '🔒', time: '13:05', device: 'Veículo 018', description: 'Motor do veículo foi bloqueado remotamente' },
+            { id: 19, type: 'powerCut', label: 'Corte de alimentação', icon: '🔌', time: '13:00', device: 'Veículo 019', description: 'Alimentação elétrica do dispositivo foi cortada' },
+            { id: 20, type: 'geofenceExit', label: 'Saída de geocerca', icon: '🧱', time: '12:55', device: 'Veículo 020', description: 'Veículo saiu de uma área geocercada' }
+        ];
+
+        const EVENTS_PER_PAGE = 5;
+        let currentPage = 0;
+        let totalPages = Math.ceil(mockEvents.length / EVENTS_PER_PAGE);
+
+        function renderEvents() {
+            const startIndex = currentPage * EVENTS_PER_PAGE;
+            const endIndex = startIndex + EVENTS_PER_PAGE;
+            const pageEvents = mockEvents.slice(startIndex, endIndex);
+            
+            const container = document.getElementById('eventsContainer');
+            container.innerHTML = '';
+            
+            if (pageEvents.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">Nenhum evento encontrado</div>';
+                return;
+            }
+            
+            pageEvents.forEach(event => {
+                const eventCard = document.createElement('div');
+                eventCard.className = 'event-card';
+                eventCard.innerHTML = `
+                    <div class="event-header">
+                        <div class="event-title">${event.icon} ${event.label}</div>
+                        <div class="event-time">${event.time}</div>
+                    </div>
+                    <div class="event-description">${event.description}</div>
+                    <div style="font-size: 12px; color: #999;">Dispositivo: ${event.device}</div>
+                `;
+                container.appendChild(eventCard);
+            });
+            
+            updatePagination();
+        }
+
+        function updatePagination() {
+            const paginationControls = document.getElementById('paginationControls');
+            const paginationInfo = document.getElementById('paginationInfo');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            
+            if (totalPages > 1) {
+                paginationControls.style.display = 'flex';
+                paginationInfo.textContent = `Página ${currentPage + 1} de ${totalPages} • ${mockEvents.length} eventos`;
+                
+                prevBtn.disabled = currentPage === 0;
+                nextBtn.disabled = currentPage >= totalPages - 1;
+            } else {
+                paginationControls.style.display = 'none';
+            }
+            
+            // Atualizar estatísticas
+            document.getElementById('totalEvents').textContent = mockEvents.length;
+            document.getElementById('currentPage').textContent = currentPage + 1;
+            document.getElementById('totalPages').textContent = totalPages;
+        }
+
+        function previousPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                renderEvents();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                renderEvents();
+            }
+        }
+
+        // Inicializar
+        renderEvents();
+        
+        console.log('📄 Teste de paginação de eventos carregado');
+        console.log('📊 Total de eventos:', mockEvents.length);
+        console.log('📄 Eventos por página:', EVENTS_PER_PAGE);
+        console.log('📄 Total de páginas:', totalPages);
+    </script>
+</body>
+</html>
+
+
+

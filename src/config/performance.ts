@@ -184,7 +184,7 @@ export const clearMemory = () => {
   
   if (usedMemory > maxMemory * 0.8) {
     // Limpar dados não essenciais do localStorage
-    const essentialKeys = ['auth-credentials', 'auth-user', 'trackmax-language', 'trackmax-theme'];
+    const essentialKeys = ['auth-user', 'trackmax-language', 'trackmax-theme'];
     Object.keys(localStorage).forEach(key => {
       if (!essentialKeys.includes(key)) {
         localStorage.removeItem(key);

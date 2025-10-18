@@ -153,7 +153,7 @@ export const TestAuthPage: React.FC = () => {
 
         <div style={{ textAlign: 'center' }}>
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            API: /api/session
+            API: /api/server (Basic Auth)
           </Text>
         </div>
       </div>

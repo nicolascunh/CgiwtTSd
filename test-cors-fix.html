@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste CORS Fix - TrackMax</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Teste CORS Fix - TrackMax</h1>
+    
+    <div class="container">
+        <h2>📊 Status da Aplicação</h2>
+        <div id="appStatus" class="status info">Verificando...</div>
+        <div id="corsStatus" class="status info">Verificando...</div>
+    </div>
+
+    <div class="container">
+        <h2>🔐 Teste de Autenticação com CORS</h2>
+        <input type="text" id="username" placeholder="Username" value="mfrastreamentook@hotmail.com">
+        <input type="password" id="password" placeholder="Password" value="987036752">
+        <button onclick="testCorsLogin()">Testar Login com CORS</button>
+        <button onclick="testCorsCheck()">Testar Check Auth com CORS</button>
+        <div id="corsResult" class="status info" style="display: none;"></div>
+    </div>
+
+    <div class="container">
+        <h2>📝 Log de Eventos</h2>
+        <button onclick="clearLog()">Limpar Log</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        const CLOUDFLARE_WORKER_URL = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #666;">[${timestamp}]</span> ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+
+        async function checkAppStatus() {
+            try {
+                const currentUrl = window.location.href;
+                const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1');
+                
+                updateStatus('appStatus', `URL: ${currentUrl} | Ambiente: ${isProduction ? 'Produção' : 'Desenvolvimento'}`, 'info');
+                log(`🔍 Verificando ambiente: ${isProduction ? 'Produção' : 'Desenvolvimento'}`);
+                
+                // Verificar CORS
+                const origin = window.location.origin;
+                log(`🌐 Origin atual: ${origin}`);
+                
+                // Testar preflight OPTIONS
+                try {
+                    const optionsResponse = await fetch(`${CLOUDFLARE_WORKER_URL}/server`, {
+                        method: 'OPTIONS',
+                        headers: {
+                            'Origin': origin,
+                            'Access-Control-Request-Method': 'GET',
+                            'Access-Control-Request-Headers': 'Authorization'
+                        }
+                    });
+                    
+                    const corsHeaders = {
+                        'Access-Control-Allow-Origin': optionsResponse.headers.get('Access-Control-Allow-Origin'),
+                        'Access-Control-Allow-Credentials': optionsResponse.headers.get('Access-Control-Allow-Credentials'),
+                        'Access-Control-Allow-Methods': optionsResponse.headers.get('Access-Control-Allow-Methods'),
+                        'Access-Control-Allow-Headers': optionsResponse.headers.get('Access-Control-Allow-Headers')
+                    };
+                    
+                    log(`🔧 Headers CORS recebidos:`, 'info');
+                    Object.entries(corsHeaders).forEach(([key, value]) => {
+                        log(`  ${key}: ${value || 'não definido'}`);
+                    });
+                    
+                    if (corsHeaders['Access-Control-Allow-Origin'] === origin) {
+                        updateStatus('corsStatus', `CORS OK - Origin específico: ${origin}`, 'success');
+                        log(`✅ CORS configurado corretamente para origin específico`);
+                    } else if (corsHeaders['Access-Control-Allow-Origin'] === '*') {
+                        updateStatus('corsStatus', `CORS com wildcard - pode causar problemas com credentials`, 'warning');
+                        log(`⚠️ CORS usando wildcard (*) - pode causar problemas com credentials: 'include'`);
+                    } else {
+                        updateStatus('corsStatus', `CORS não configurado corretamente`, 'error');
+                        log(`❌ CORS não configurado corretamente`);
+                    }
+                    
+                } catch (corsError) {
+                    updateStatus('corsStatus', `Erro no teste CORS: ${corsError.message}`, 'error');
+                    log(`❌ Erro no teste CORS: ${corsError.message}`);
+                }
+                
+            } catch (error) {
+                log(`❌ Erro ao verificar status: ${error.message}`, 'error');
+                updateStatus('appStatus', `Erro: ${error.message}`, 'error');
+            }
+        }
+
+        async function testCorsLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('corsResult');
+            
+            if (!username || !password) {
+                resultDiv.textContent = 'Por favor, preencha username e password';
+                resultDiv.className = 'status error';
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = 'Testando login com CORS...';
+                resultDiv.className = 'status info';
+                
+                const credentials = btoa(`${username}:${password}`);
+                log(`🔐 Testando login com CORS para: ${username}`);
+                
+                // Testar com credentials: 'include'
+                const response = await fetch(`${CLOUDFLARE_WORKER_URL}/server`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`,
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include' // Isso deve funcionar agora com CORS correto
+                });
+                
+                if (response.ok) {
+                    resultDiv.textContent = 'Login com CORS bem-sucedido!';
+                    resultDiv.className = 'status success';
+                    log(`✅ Login com CORS bem-sucedido para: ${username}`);
+                    
+                    // Salvar credenciais
+                    localStorage.setItem('auth-credentials', credentials);
+                    localStorage.setItem('auth-user', username);
+                } else {
+                    resultDiv.textContent = `Login falhou: ${response.status} ${response.statusText}`;
+                    resultDiv.className = 'status error';
+                    log(`❌ Login falhou: ${response.status} ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                resultDiv.textContent = `Erro no login: ${error.message}`;
+                resultDiv.className = 'status error';
+                log(`❌ Erro no login: ${error.message}`);
+            }
+        }
+
+        async function testCorsCheck() {
+            const resultDiv = document.getElementById('corsResult');
+            
+            try {
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = 'Testando check auth com CORS...';
+                resultDiv.className = 'status info';
+                
+                const credentials = localStorage.getItem('auth-credentials');
+                if (!credentials) {
+                    resultDiv.textContent = 'Nenhuma credencial encontrada. Faça login primeiro.';
+                    resultDiv.className = 'status warning';
+                    return;
+                }
+                
+                log(`🔍 Testando check auth com CORS`);
+                
+                // Testar com credentials: 'include'
+                const response = await fetch(`${CLOUDFLARE_WORKER_URL}/server`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${credentials}`,
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include' // Isso deve funcionar agora com CORS correto
+                });
+                
+                if (response.ok) {
+                    resultDiv.textContent = 'Check auth com CORS bem-sucedido!';
+                    resultDiv.className = 'status success';
+                    log(`✅ Check auth com CORS bem-sucedido`);
+                } else {
+                    resultDiv.textContent = `Check auth falhou: ${response.status} ${response.statusText}`;
+                    resultDiv.className = 'status error';
+                    log(`❌ Check auth falhou: ${response.status} ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                resultDiv.textContent = `Erro no check auth: ${error.message}`;
+                resultDiv.className = 'status error';
+                log(`❌ Erro no check auth: ${error.message}`);
+            }
+        }
+
+        // Inicializar
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 Página de teste CORS carregada');
+            checkAppStatus();
+        });
+    </script>
+</body>
+</html>
+
+
+

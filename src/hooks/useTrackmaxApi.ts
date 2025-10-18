@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Device, Position, User, Group, Notification, Event, ReportTrips, MaintenanceRecord, Driver } from '../types';
-import { getApiUrl } from '../config/api';
+import { getApiUrlSync } from '../config/api';
 
 type FetchEventsParams = {
   deviceIds?: number[];
@@ -21,15 +21,23 @@ type FetchMaintenanceParams = {
   deviceIds?: number[];
 };
 
+// Cache em memória para trips
+const tripsCache = new Map<string, { data: ReportTrips[]; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
 export const useTrackmaxApi = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Cache para posições (5 minutos)
+  // Cache mais agressivo para contornar limitações da Netlify
   const positionsCache = new Map<string, { data: Position[]; timestamp: number }>();
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+  const CACHE_DURATION = 30 * 60 * 1000; // 30 minutos (aumentado drasticamente)
+  
+  // Cache para dispositivos (15 minutos)
+  const devicesCache = new Map<string, { data: Device[]; timestamp: number }>();
+  const DEVICES_CACHE_DURATION = 15 * 60 * 1000; // 15 minutos
 
-  // Função para verificar cache
+  // Função para verificar cache de posições
   const getCachedPositions = (cacheKey: string): Position[] | null => {
     const cached = positionsCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
@@ -39,42 +47,101 @@ export const useTrackmaxApi = () => {
     return null;
   };
 
+  // Função para verificar cache de dispositivos
+  const getCachedDevices = (cacheKey: string): Device[] | null => {
+    const cached = devicesCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < DEVICES_CACHE_DURATION) {
+      console.log('📦 Usando dispositivos do cache:', cached.data.length);
+      return cached.data;
+    }
+    return null;
+  };
+
+  // Função para salvar dispositivos no cache
+  const setCachedDevices = (cacheKey: string, data: Device[]) => {
+    devicesCache.set(cacheKey, { data, timestamp: Date.now() });
+  };
+
   const fetchEvents = async (params: FetchEventsParams = {}): Promise<Event[]> => {
     setLoading(true);
     setError(null);
 
     try {
-      // Limitar o número de deviceIds para evitar URLs muito longas
-      const MAX_DEVICES_PER_REQUEST = 50;
+      // ✅ CORRIGIDO: Usar /api/reports/events (endpoint correto do Traccar)
+      // Ajustar dinamicamente baseado no número de dispositivos
       const deviceIds = params.deviceIds || [];
+      const deviceCount = deviceIds.length;
       
+        // Configurações otimizadas para batch requests (20-50 devices por chamada)
+        let MAX_DEVICES_PER_REQUEST = 30; // Aumentado para melhor throughput
+        let DELAY_BETWEEN_BATCHES = 500; // Reduzido para 500ms entre lotes
+        
+        if (deviceCount > 2000) {
+          MAX_DEVICES_PER_REQUEST = 20; // Lotes médios para frotas muito grandes
+          DELAY_BETWEEN_BATCHES = 800; // 800ms entre lotes
+          console.log('🚨 Frota muito grande detectada:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else if (deviceCount > 1000) {
+          MAX_DEVICES_PER_REQUEST = 25; // Lotes médios para frotas grandes
+          DELAY_BETWEEN_BATCHES = 600; // 600ms entre lotes
+          console.log('⚠️ Frota grande detectada:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else if (deviceCount > 500) {
+          MAX_DEVICES_PER_REQUEST = 35; // Lotes maiores para frotas médias
+          DELAY_BETWEEN_BATCHES = 400; // 400ms entre lotes
+          console.log('📊 Frota média detectada:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else if (deviceCount > 100) {
+          MAX_DEVICES_PER_REQUEST = 40; // Lotes grandes para frotas pequenas
+          DELAY_BETWEEN_BATCHES = 300; // 300ms entre lotes
+          console.log('📈 Frota pequena detectada:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else {
+          MAX_DEVICES_PER_REQUEST = 50; // Lotes máximos para frotas muito pequenas
+          DELAY_BETWEEN_BATCHES = 200; // 200ms entre lotes
+          console.log('🚀 Frota muito pequena detectada:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        }
+
       if (deviceIds.length === 0) {
         console.log('🚨 Nenhum deviceId fornecido para buscar eventos');
         return [];
       }
 
-      // Se temos muitos dispositivos, fazer requisições em lotes
-      if (deviceIds.length > MAX_DEVICES_PER_REQUEST) {
-        console.log(`🚨 Muitos dispositivos (${deviceIds.length}), fazendo requisições em lotes de ${MAX_DEVICES_PER_REQUEST}`);
-        
-        const allEvents: Event[] = [];
-        const batches = [];
-        
-        for (let i = 0; i < deviceIds.length; i += MAX_DEVICES_PER_REQUEST) {
-          batches.push(deviceIds.slice(i, i + MAX_DEVICES_PER_REQUEST));
-        }
+        // Se temos muitos dispositivos, fazer requisições em lotes com delay
+        if (deviceIds.length > MAX_DEVICES_PER_REQUEST) {
+          console.log(`🚨 Muitos dispositivos (${deviceIds.length}), fazendo requisições em lotes de ${MAX_DEVICES_PER_REQUEST} com delay de ${DELAY_BETWEEN_BATCHES}ms`);
 
-        for (const batch of batches) {
-          const batchEvents = await fetchEventsBatch({
-            ...params,
-            deviceIds: batch
-          });
-          allEvents.push(...batchEvents);
-        }
+          const allEvents: Event[] = [];
+          const batches = [];
 
-        console.log('🚨 Total de eventos recebidos de todos os lotes:', allEvents.length);
-        return allEvents;
-      }
+          for (let i = 0; i < deviceIds.length; i += MAX_DEVICES_PER_REQUEST) {
+            batches.push(deviceIds.slice(i, i + MAX_DEVICES_PER_REQUEST));
+          }
+
+          console.log(`📊 Total de lotes a processar: ${batches.length}`);
+
+          // Processar lotes sequencialmente com delay para evitar rate limiting
+          for (let i = 0; i < batches.length; i++) {
+            const batch = batches[i];
+            console.log(`🚨 Processando lote ${i + 1}/${batches.length} com ${batch.length} dispositivos`);
+
+            try {
+              const batchEvents = await fetchEventsBatch({
+                ...params,
+                deviceIds: batch
+              });
+              allEvents.push(...batchEvents);
+
+              // Delay entre lotes para evitar rate limiting (exceto no último lote)
+              if (i < batches.length - 1) {
+                console.log(`⏳ Aguardando ${DELAY_BETWEEN_BATCHES}ms antes do próximo lote...`);
+                await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+              }
+            } catch (error) {
+              console.error(`❌ Erro no lote ${i + 1}:`, error);
+              // Continuar com os próximos lotes mesmo se um falhar
+            }
+          }
+
+          console.log('🚨 Total de eventos recebidos de todos os lotes:', allEvents.length);
+          return allEvents;
+        }
 
       return await fetchEventsBatch(params);
     } catch (err) {
@@ -104,10 +171,15 @@ export const useTrackmaxApi = () => {
         query.append('pageSize', params.pageSize.toString());
       }
 
-      params.deviceIds?.forEach((id) => query.append('deviceId', id.toString()));
+      // Traccar não suporta múltiplos deviceIds, fazer requisições individuais
+      if (params.deviceIds && params.deviceIds.length > 0) {
+        // Usar apenas o primeiro deviceId para esta requisição
+        query.append('deviceId', params.deviceIds[0].toString());
+      }
       params.types?.forEach((type) => query.append('type', type));
 
-      const url = `${getApiUrl()}/events${query.toString() ? `?${query.toString()}` : ''}`;
+      // ✅ CORRIGIDO: Usar /api/reports/events (endpoint correto do Traccar)
+      const url = `${getApiUrlSync()}/reports/events${query.toString() ? `?${query.toString()}` : ''}`;
       console.log('🚨 Buscando eventos (lote):', url);
 
       const response = await fetchWithRetry(url, getFetchOptions({
@@ -139,6 +211,31 @@ export const useTrackmaxApi = () => {
     }
   };
 
+  // Função para gerar chave de cache
+  const getCacheKey = (deviceIds: number[], from: string, to: string): string => {
+    const sortedIds = [...deviceIds].sort((a, b) => a - b);
+    return `trips:${sortedIds.join(',')}:${from}:${to}`;
+  };
+
+  // Função para verificar cache
+  const getCachedTrips = (cacheKey: string): ReportTrips[] | null => {
+    const cached = tripsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log('🛣️ Cache hit para trips:', cacheKey);
+      return cached.data;
+    }
+    if (cached) {
+      tripsCache.delete(cacheKey);
+    }
+    return null;
+  };
+
+  // Função para salvar no cache
+  const setCachedTrips = (cacheKey: string, data: ReportTrips[]): void => {
+    tripsCache.set(cacheKey, { data, timestamp: Date.now() });
+    console.log('🛣️ Cache salvo para trips:', cacheKey, 'com', data.length, 'viagens');
+  };
+
   const fetchTrips = async ({ deviceIds = [], from, to }: FetchTripsParams): Promise<ReportTrips[]> => {
     setLoading(true);
     setError(null);
@@ -148,39 +245,72 @@ export const useTrackmaxApi = () => {
         throw new Error('Parâmetros "from" e "to" são obrigatórios para buscar viagens');
       }
 
-      // Limitar o número de deviceIds para evitar URLs muito longas
-      const MAX_DEVICES_PER_REQUEST = 50;
+      // Verificar cache primeiro
+      const cacheKey = getCacheKey(deviceIds, from, to);
+      const cachedTrips = getCachedTrips(cacheKey);
+      if (cachedTrips) {
+        setLoading(false);
+        return cachedTrips;
+      }
+
+      // Configuração otimizada para batch requests de viagens (20-50 devices por chamada)
+      const MAX_DEVICES_PER_REQUEST = 30; // Aumentado para melhor throughput
       
       if (deviceIds.length === 0) {
         console.log('🛣️ Nenhum deviceId fornecido para buscar viagens');
         return [];
       }
 
-      // Se temos muitos dispositivos, fazer requisições em lotes
+      let allTrips: ReportTrips[] = [];
+
+      // Se temos muitos dispositivos, fazer requisições em lotes PARALELOS
       if (deviceIds.length > MAX_DEVICES_PER_REQUEST) {
-        console.log(`🛣️ Muitos dispositivos (${deviceIds.length}), fazendo requisições em lotes de ${MAX_DEVICES_PER_REQUEST}`);
+        console.log(`🛣️ Frota grande detectada (${deviceIds.length} dispositivos), usando batching paralelo`);
         
-        const allTrips: ReportTrips[] = [];
+        // Para frotas muito grandes, limitar a 100 dispositivos mais ativos
+        const limitedDeviceIds = deviceIds.length > 100 
+          ? deviceIds.slice(0, 100) 
+          : deviceIds;
+        
+        if (deviceIds.length > 100) {
+          console.log(`🛣️ Limitando a ${limitedDeviceIds.length} dispositivos mais ativos para performance`);
+        }
+        
         const batches = [];
         
-        for (let i = 0; i < deviceIds.length; i += MAX_DEVICES_PER_REQUEST) {
-          batches.push(deviceIds.slice(i, i + MAX_DEVICES_PER_REQUEST));
+        for (let i = 0; i < limitedDeviceIds.length; i += MAX_DEVICES_PER_REQUEST) {
+          batches.push(limitedDeviceIds.slice(i, i + MAX_DEVICES_PER_REQUEST));
         }
 
-        for (const batch of batches) {
-          const batchTrips = await fetchTripsBatch({
-            deviceIds: batch,
-            from,
-            to
-          });
-          allTrips.push(...batchTrips);
+        console.log(`🛣️ Processando ${batches.length} lotes em paralelo`);
+
+        // Processar lotes em paralelo (máximo 3 lotes simultâneos)
+        const PARALLEL_BATCHES = 3;
+        const batchPromises = [];
+        
+        for (let i = 0; i < batches.length; i += PARALLEL_BATCHES) {
+          const parallelBatches = batches.slice(i, i + PARALLEL_BATCHES);
+          const parallelPromises = parallelBatches.map(batch => 
+            fetchTripsBatch({ deviceIds: batch, from, to })
+          );
+          batchPromises.push(Promise.all(parallelPromises));
         }
 
-        console.log('🛣️ Total de viagens recebidas de todos os lotes:', allTrips.length);
-        return allTrips;
+        // Aguardar todos os lotes paralelos
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Flatten todos os resultados
+        allTrips = batchResults.flat().flat();
+
+        console.log('🛣️ Total de viagens recebidas de todos os lotes paralelos:', allTrips.length);
+      } else {
+        allTrips = await fetchTripsBatch({ deviceIds, from, to });
       }
 
-      return await fetchTripsBatch({ deviceIds, from, to });
+      // Salvar no cache
+      setCachedTrips(cacheKey, allTrips);
+      
+      return allTrips;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar viagens';
       console.error('❌ Erro ao buscar viagens:', err);
@@ -191,63 +321,105 @@ export const useTrackmaxApi = () => {
     }
   };
 
+  // Função para processar dispositivos em lotes com concorrência controlada
+  const processDevicesInBatches = async <T>(
+    items: T[],
+    batchSize: number,
+    processor: (item: T) => Promise<any>
+  ): Promise<any[]> => {
+    const results: any[] = [];
+    
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const batchPromises = batch.map(processor);
+      const batchResults = await Promise.allSettled(batchPromises);
+      
+      // Adicionar apenas resultados bem-sucedidos
+      batchResults.forEach((result) => {
+        if (result.status === 'fulfilled' && result.value) {
+          results.push(result.value);
+        }
+      });
+    }
+    
+    return results;
+  };
+
   const fetchTripsBatch = async ({ deviceIds = [], from, to }: FetchTripsParams): Promise<ReportTrips[]> => {
     try {
-      const url = `${getApiUrl()}/reports/trips`;
-      const search = new URLSearchParams();
-      deviceIds.forEach((id) => search.append('deviceId', id.toString()));
-      search.append('from', from);
-      search.append('to', to);
-
-      const fullUrl = `${url}?${search.toString()}`;
-      console.log('🛣️ Buscando viagens (lote):', fullUrl);
-
-      const response = await fetchWithRetry(
-        fullUrl,
-        getFetchOptions({
-          headers: {
-            Accept: 'application/json',
-          },
-        }),
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+      if (deviceIds.length === 0) {
+        console.log('🛣️ Nenhum deviceId fornecido para buscar viagens');
+        return [];
       }
 
-      const data = await response.json();
-      const trips: ReportTrips[] = Array.isArray(data) ? data : data.trips || [];
+      const url = `${getApiUrlSync()}/reports/trips`;
+      const CONCURRENT_REQUESTS = 5; // Limite de concorrência
+      
+      console.log(`🛣️ Buscando viagens para ${deviceIds.length} dispositivos com concorrência de ${CONCURRENT_REQUESTS}`);
 
-      console.log('🛣️ Viagens recebidas (lote):', trips.length);
-      return trips;
+      // Função para buscar trips de um dispositivo específico
+      const fetchDeviceTrips = async (deviceId: number): Promise<ReportTrips[]> => {
+        try {
+          const search = new URLSearchParams();
+          search.append('deviceId', deviceId.toString());
+          search.append('from', from);
+          search.append('to', to);
+
+          const fullUrl = `${url}?${search.toString()}`;
+          console.log('🛣️ Buscando viagens para dispositivo:', deviceId);
+
+          const response = await fetchWithRetry(
+            fullUrl,
+            getFetchOptions({
+              headers: {
+                Accept: 'application/json',
+              },
+            }),
+          );
+
+          if (!response.ok) {
+            console.warn(`⚠️ Erro ao buscar viagens para dispositivo ${deviceId}: ${response.status}`);
+            return [];
+          }
+
+          const data = await response.json();
+          const trips: ReportTrips[] = Array.isArray(data) ? data : data.trips || [];
+          
+          if (trips.length > 0) {
+            console.log(`🛣️ ${trips.length} viagens encontradas para dispositivo ${deviceId}`);
+          }
+          
+          return trips;
+        } catch (deviceError) {
+          console.warn(`⚠️ Erro ao buscar viagens para dispositivo ${deviceId}:`, deviceError);
+          return [];
+        }
+      };
+
+      // Processar dispositivos em lotes com concorrência controlada
+      const allTripsArrays = await processDevicesInBatches(
+        deviceIds,
+        CONCURRENT_REQUESTS,
+        fetchDeviceTrips
+      );
+
+      // Flatten todos os arrays de trips
+      const allTrips: ReportTrips[] = allTripsArrays.flat();
+
+      console.log('🛣️ Total de viagens recebidas (lote):', allTrips.length);
+      return allTrips;
     } catch (err) {
       throw err;
     }
   };
 
-  const fetchMaintenances = async (params: FetchMaintenanceParams = {}): Promise<MaintenanceRecord[]> => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log('ℹ️ Ignorando fetch de manutenções na API (não disponível via CORS).');
-      return [];
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao buscar manutenções';
-      console.error('❌ Erro ao buscar manutenções:', err);
-      setError(errorMessage);
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchDrivers = async (): Promise<Driver[]> => {
     setLoading(true);
     setError(null);
 
     try {
-      const url = `${getApiUrl()}/drivers`;
+      const url = `${getApiUrlSync()}/drivers`;
       console.log('🧍‍♂️ Buscando motoristas:', url);
 
       const response = await fetchWithRetry(url, getFetchOptions());
@@ -279,30 +451,28 @@ export const useTrackmaxApi = () => {
     console.log('💾 Posições salvas no cache:', data.length);
   };
 
-  const getAuthHeaders = (): Record<string, string> => {
-    // Para Traccar, usamos Basic Auth
-    const storedCredentials = localStorage.getItem("auth-credentials");
-    console.log('🔑 Credenciais recuperadas do localStorage:', storedCredentials ? 'Present' : 'Missing');
-    console.log('🔑 API URL sendo usada:', getApiUrl());
-    
-    return storedCredentials ? {
-      "Authorization": `Basic ${storedCredentials}`
-    } : {};
-  };
-
   const getFetchOptions = (overrides: RequestInit = {}): RequestInit => {
-    const overrideHeaders = overrides.headers as Record<string, string> | undefined;
-    const authHeaders = getAuthHeaders();
+    const method = (overrides.method || "GET").toString().toUpperCase();
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+      ...(overrides.headers as Record<string, string> | undefined),
+    };
 
-    console.log('🔑 Headers de autenticação:', authHeaders);
-    console.log('🔑 Headers customizados:', overrideHeaders);
+    if (method !== "GET" && method !== "HEAD" && overrides.body !== undefined) {
+      headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+    }
+
+    // Usar Basic Auth - mais confiável que cookies
+    if (typeof window !== "undefined") {
+      const credentials = localStorage.getItem("auth-credentials") || localStorage.getItem("auth-basic");
+      if (credentials) {
+        headers["Authorization"] = `Basic ${credentials}`;
+      }
+    }
 
     return {
       ...overrides,
-      headers: {
-        ...authHeaders,
-        ...overrideHeaders,
-      },
+      headers,
       signal: overrides.signal ?? AbortSignal.timeout(120000), // 2 minutos para frotas grandes
     };
   };
@@ -322,6 +492,17 @@ export const useTrackmaxApi = () => {
         
         if (response.ok) {
           return response;
+        }
+        
+        // Se for erro 429 (rate limiting), aguardar mais tempo
+        if (response.status === 429 && attempt < maxRetries) {
+          // Delays mais rápidos para melhor performance
+          const baseDelay = Math.pow(2, attempt) * 2000; // Reduzido de 5s para 2s
+          const additionalDelay = attempt * 1000; // Reduzido de 3s para 1s por tentativa
+          const delay = baseDelay + additionalDelay;
+          console.log(`⏳ Rate limit (429), aguardando ${delay}ms antes da próxima tentativa...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
         }
         
         // Se for erro 500, tentar novamente
@@ -356,12 +537,18 @@ export const useTrackmaxApi = () => {
     setError(null);
     
     try {
-      const url = `${getApiUrl()}/devices?limit=${pageSize}&offset=${(page - 1) * pageSize}`;
+      // Verificar cache primeiro
+      const cacheKey = `devices_${page}_${pageSize}`;
+      const cachedDevices = getCachedDevices(cacheKey);
+      if (cachedDevices) {
+        console.log('📦 Usando dispositivos do cache');
+        setLoading(false);
+        return { devices: cachedDevices, total: cachedDevices.length, hasMore: false };
+      }
+
+      const url = `${getApiUrlSync()}/devices?limit=${pageSize}&offset=${(page - 1) * pageSize}`;
       
       console.log('🔍 Buscando dispositivos:', url);
-      console.log('🔑 Headers:', getAuthHeaders());
-      console.log('🔑 Credenciais salvas:', !!localStorage.getItem("auth-credentials"));
-
       const response = await fetchWithRetry(url, getFetchOptions());
 
       console.log('📡 Resposta da API:', response.status, response.statusText);
@@ -378,6 +565,9 @@ export const useTrackmaxApi = () => {
       const hasMore = devices.length === pageSize;
 
       console.log('✅ Dispositivos processados:', devices.length, devices);
+
+      // Salvar no cache
+      setCachedDevices(cacheKey, devices);
 
       return { devices, total, hasMore };
     } catch (err) {
@@ -398,13 +588,39 @@ export const useTrackmaxApi = () => {
     setError(null);
     
     try {
-      // Limitar o número de deviceIds para evitar URLs muito longas
-      const MAX_DEVICES_PER_REQUEST = 50;
+      // Ajustar dinamicamente baseado no número de dispositivos
       const deviceIdsList = deviceIds || [];
+      const deviceCount = deviceIdsList.length;
       
-      // Se temos muitos dispositivos, fazer requisições em lotes
+        // Configurações otimizadas para batch requests de posições (20-50 devices por chamada)
+        let MAX_DEVICES_PER_REQUEST = 30; // Aumentado para melhor throughput
+        let DELAY_BETWEEN_BATCHES = 500; // Reduzido para 500ms entre lotes
+        
+        if (deviceCount > 2000) {
+          MAX_DEVICES_PER_REQUEST = 20; // Lotes médios para frotas muito grandes
+          DELAY_BETWEEN_BATCHES = 800; // 800ms entre lotes
+          console.log('🚨 Frota muito grande detectada para posições:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else if (deviceCount > 1000) {
+          MAX_DEVICES_PER_REQUEST = 25; // Lotes médios para frotas grandes
+          DELAY_BETWEEN_BATCHES = 600; // 600ms entre lotes
+          console.log('⚠️ Frota grande detectada para posições:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else if (deviceCount > 500) {
+          MAX_DEVICES_PER_REQUEST = 35; // Lotes maiores para frotas médias
+          DELAY_BETWEEN_BATCHES = 400; // 400ms entre lotes
+          console.log('📊 Frota média detectada para posições:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else if (deviceCount > 100) {
+          MAX_DEVICES_PER_REQUEST = 40; // Lotes grandes para frotas pequenas
+          DELAY_BETWEEN_BATCHES = 300; // 300ms entre lotes
+          console.log('📈 Frota pequena detectada para posições:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        } else {
+          MAX_DEVICES_PER_REQUEST = 50; // Lotes máximos para frotas muito pequenas
+          DELAY_BETWEEN_BATCHES = 200; // 200ms entre lotes
+          console.log('🚀 Frota muito pequena detectada para posições:', deviceCount, 'dispositivos - usando lotes de', MAX_DEVICES_PER_REQUEST);
+        }
+      
+      // Se temos muitos dispositivos, fazer requisições em lotes com delay
       if (deviceIdsList.length > MAX_DEVICES_PER_REQUEST) {
-        console.log(`📍 Muitos dispositivos (${deviceIdsList.length}), fazendo requisições em lotes de ${MAX_DEVICES_PER_REQUEST}`);
+        console.log(`📍 Muitos dispositivos (${deviceIdsList.length}), fazendo requisições em lotes de ${MAX_DEVICES_PER_REQUEST} com delay de ${DELAY_BETWEEN_BATCHES}ms`);
         
         const allPositions: Position[] = [];
         const batches = [];
@@ -412,12 +628,29 @@ export const useTrackmaxApi = () => {
         for (let i = 0; i < deviceIdsList.length; i += MAX_DEVICES_PER_REQUEST) {
           batches.push(deviceIdsList.slice(i, i + MAX_DEVICES_PER_REQUEST));
         }
-
-        for (const batch of batches) {
-          const batchPositions = await fetchPositionsBatch(batch, limit);
-          allPositions.push(...batchPositions);
+        
+        console.log(`📊 Total de lotes a processar para posições: ${batches.length}`);
+        
+        // Processar lotes sequencialmente com delay para evitar rate limiting
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i];
+          console.log(`📍 Processando lote ${i + 1}/${batches.length} com ${batch.length} dispositivos`);
+          
+          try {
+            const batchPositions = await fetchPositionsBatch(batch, limit);
+            allPositions.push(...batchPositions);
+            
+            // Delay entre lotes para evitar rate limiting (exceto no último lote)
+            if (i < batches.length - 1) {
+              console.log(`⏳ Aguardando ${DELAY_BETWEEN_BATCHES}ms antes do próximo lote...`);
+              await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+            }
+          } catch (error) {
+            console.error(`❌ Erro no lote ${i + 1}:`, error);
+            // Continuar com os próximos lotes mesmo se um falhar
+          }
         }
-
+        
         console.log('📍 Total de posições recebidas de todos os lotes:', allPositions.length);
         return allPositions;
       }
@@ -450,10 +683,11 @@ export const useTrackmaxApi = () => {
       // Buscar todas as posições (sem filtro de deviceId na URL)
       const params = new URLSearchParams({ limit: limit.toString() });
       if (deviceIds && deviceIds.length > 0) {
-        deviceIds.forEach((id) => params.append('deviceId', id.toString()));
+        // Traccar não suporta múltiplos deviceIds, usar apenas o primeiro
+        params.append('deviceId', deviceIds[0].toString());
       }
 
-      const url = `${getApiUrl()}/positions?${params.toString()}`;
+      const url = `${getApiUrlSync()}/positions?${params.toString()}`;
 
       console.log('🔍 Buscando posições (lote):', url);
 
@@ -528,7 +762,7 @@ export const useTrackmaxApi = () => {
             missingIds.map(async (id) => {
               try {
                 const fallbackParams = new URLSearchParams({ deviceId: id.toString(), limit: '1' });
-                const fallbackUrl = `${getApiUrl()}/positions?${fallbackParams.toString()}`;
+                const fallbackUrl = `${getApiUrlSync()}/positions?${fallbackParams.toString()}`;
                 const fallbackResponse = await fetchWithRetry(
                   fallbackUrl,
                   getFetchOptions({
@@ -597,7 +831,7 @@ export const useTrackmaxApi = () => {
   // Função para testar conectividade
   const testConnection = async (): Promise<boolean> => {
     try {
-      const url = `${getApiUrl()}/server`;
+      const url = `${getApiUrlSync()}/server`;
       console.log('🧪 Testando conexão:', url);
       
       const response = await fetch(url, getFetchOptions());
@@ -618,7 +852,6 @@ export const useTrackmaxApi = () => {
     fetchPositions,
     fetchEvents,
     fetchTrips,
-    fetchMaintenances,
     fetchDrivers,
     clearCache,
     testConnection

@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Rate Limiting Fix</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #28a745;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Teste - Rate Limiting Fix</h1>
+        <p>Este teste verifica se as otimizações de rate limiting estão funcionando corretamente.</p>
+        
+        <div id="status" class="status info">
+            ⏳ Aguardando início do teste...
+        </div>
+        
+        <div class="progress">
+            <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+        </div>
+        
+        <button onclick="testSequentialRequests()" id="testBtn">🚀 Testar Requisições Sequenciais</button>
+        <button onclick="testBatchRequests()" id="batchBtn">📦 Testar Requisições em Lotes</button>
+        <button onclick="clearLog()">🗑️ Limpar Log</button>
+        
+        <div id="log" class="log"></div>
+        
+        <h3>📊 Resultados</h3>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        const CREDENTIALS = 'bmRldjoyMDI1'; // ndev:2025
+        
+        let testResults = {
+            sequential: { success: 0, errors: 0, rateLimited: 0 },
+            batch: { success: 0, errors: 0, rateLimited: 0 }
+        };
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logEntry.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : type === 'warning' ? '#ffc107' : '#6c757d';
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+        
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            testResults = { sequential: { success: 0, errors: 0, rateLimited: 0 }, batch: { success: 0, errors: 0, rateLimited: 0 } };
+            updateResults();
+        }
+        
+        function updateResults() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="status info">
+                    <strong>Requisições Sequenciais:</strong><br>
+                    ✅ Sucessos: ${testResults.sequential.success}<br>
+                    ❌ Erros: ${testResults.sequential.errors}<br>
+                    🚫 Rate Limited: ${testResults.sequential.rateLimited}
+                </div>
+                <div class="status info">
+                    <strong>Requisições em Lotes:</strong><br>
+                    ✅ Sucessos: ${testResults.batch.success}<br>
+                    ❌ Erros: ${testResults.batch.errors}<br>
+                    🚫 Rate Limited: ${testResults.batch.rateLimited}
+                </div>
+            `;
+        }
+        
+        async function makeRequest(url, delay = 0) {
+            if (delay > 0) {
+                log(`⏳ Aguardando ${delay}ms...`, 'warning');
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+            
+            try {
+                log(`🔄 Fazendo requisição: ${url}`, 'info');
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Basic ${CREDENTIALS}`,
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.status === 429) {
+                    log(`🚫 Rate limit detectado (429)`, 'error');
+                    return { success: false, rateLimited: true, status: 429 };
+                } else if (response.ok) {
+                    log(`✅ Sucesso (${response.status})`, 'success');
+                    return { success: true, rateLimited: false, status: response.status };
+                } else {
+                    log(`❌ Erro (${response.status})`, 'error');
+                    return { success: false, rateLimited: false, status: response.status };
+                }
+            } catch (error) {
+                log(`💥 Erro de rede: ${error.message}`, 'error');
+                return { success: false, rateLimited: false, error: error.message };
+            }
+        }
+        
+        async function testSequentialRequests() {
+            const btn = document.getElementById('testBtn');
+            btn.disabled = true;
+            btn.textContent = '🔄 Testando...';
+            
+            updateStatus('🧪 Testando requisições sequenciais com delay...', 'info');
+            log('🚀 Iniciando teste de requisições sequenciais', 'info');
+            
+            const testUrls = [
+                `${API_BASE_URL}/server`,
+                `${API_BASE_URL}/devices?limit=5`,
+                `${API_BASE_URL}/positions?limit=10`,
+                `${API_BASE_URL}/events?limit=5`
+            ];
+            
+            for (let i = 0; i < testUrls.length; i++) {
+                const url = testUrls[i];
+                updateProgress((i / testUrls.length) * 100);
+                
+                const result = await makeRequest(url, 2000); // 2 segundos de delay
+                
+                if (result.rateLimited) {
+                    testResults.sequential.rateLimited++;
+                } else if (result.success) {
+                    testResults.sequential.success++;
+                } else {
+                    testResults.sequential.errors++;
+                }
+                
+                updateResults();
+            }
+            
+            updateProgress(100);
+            updateStatus('✅ Teste sequencial concluído!', 'success');
+            log('🎉 Teste sequencial finalizado', 'success');
+            
+            btn.disabled = false;
+            btn.textContent = '🚀 Testar Requisições Sequenciais';
+        }
+        
+        async function testBatchRequests() {
+            const btn = document.getElementById('batchBtn');
+            btn.disabled = true;
+            btn.textContent = '🔄 Testando...';
+            
+            updateStatus('🧪 Testando requisições em lotes...', 'info');
+            log('🚀 Iniciando teste de requisições em lotes', 'info');
+            
+            // Simular lotes de dispositivos (como no código otimizado)
+            const deviceBatches = [
+                [1, 2, 3, 4, 5],
+                [6, 7, 8, 9, 10],
+                [11, 12, 13, 14, 15]
+            ];
+            
+            for (let i = 0; i < deviceBatches.length; i++) {
+                const batch = deviceBatches[i];
+                updateProgress((i / deviceBatches.length) * 100);
+                
+                log(`📦 Processando lote ${i + 1}/${deviceBatches.length} com ${batch.length} dispositivos`, 'info');
+                
+                // Simular requisição de posições para o lote
+                const deviceIds = batch.map(id => `deviceId=${id}`).join('&');
+                const url = `${API_BASE_URL}/positions?limit=10&${deviceIds}`;
+                
+                const result = await makeRequest(url, 2000); // 2 segundos de delay entre lotes
+                
+                if (result.rateLimited) {
+                    testResults.batch.rateLimited++;
+                } else if (result.success) {
+                    testResults.batch.success++;
+                } else {
+                    testResults.batch.errors++;
+                }
+                
+                updateResults();
+            }
+            
+            updateProgress(100);
+            updateStatus('✅ Teste em lotes concluído!', 'success');
+            log('🎉 Teste em lotes finalizado', 'success');
+            
+            btn.disabled = false;
+            btn.textContent = '📦 Testar Requisições em Lotes';
+        }
+        
+        // Inicializar
+        updateResults();
+        log('🔧 Sistema de teste de rate limiting carregado', 'info');
+        log('💡 As otimizações implementadas:', 'info');
+        log('   - Redução de dispositivos por lote: 50 → 20', 'info');
+        log('   - Delay de 2 segundos entre lotes', 'info');
+        log('   - Retry com backoff exponencial para 429', 'info');
+        log('   - Processamento sequencial de lotes', 'info');
+    </script>
+</body>
+</html>
+
+
+

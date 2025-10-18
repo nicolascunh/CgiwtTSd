@@ -148,7 +148,7 @@ export const VehicleList: React.FC<VehicleListProps> = ({
                   cursor: 'pointer',
                   transition: 'all 0.2s ease'
                 }}
-                bodyStyle={{ padding: '12px' }}
+                styles={{ body: { padding: '12px' } }}
               >
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                   {/* Avatar do veículo */}

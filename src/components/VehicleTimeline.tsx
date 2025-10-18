@@ -11,6 +11,7 @@ import {
   Pause
 } from 'lucide-react';
 import type { Position } from '../types';
+import { getTimelineEventStyle, getEventLabel } from '../utils/eventMapping';
 
 interface TimelineEvent {
   id: string;
@@ -90,6 +91,8 @@ export const VehicleTimeline: React.FC<VehicleTimelineProps> = ({
   const lastUpdate = positions.length > 0 ? new Date(positions[0].deviceTime) : new Date();
 
   const getEventIcon = (type: TimelineEvent['type']) => {
+    const style = getTimelineEventStyle(type);
+    // Usar ícones do Lucide React baseados no tipo
     switch (type) {
       case 'driving':
         return <Car className="w-4 h-4 text-green-500" />;
@@ -120,18 +123,7 @@ export const VehicleTimeline: React.FC<VehicleTimelineProps> = ({
   };
 
   const getEventText = (type: TimelineEvent['type']) => {
-    switch (type) {
-      case 'driving':
-        return 'Dirigindo';
-      case 'stopped':
-        return 'Parado';
-      case 'started':
-        return 'Iniciou viagem';
-      case 'warning':
-        return 'Alerta';
-      default:
-        return 'Atividade';
-    }
+    return getEventLabel(type);
   };
 
   return (

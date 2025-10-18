@@ -26,20 +26,6 @@ export const VehicleTrackingPage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        // Verificar se há credenciais de autenticação
-        const storedUser = localStorage.getItem("auth-user");
-        const storedCredentials = localStorage.getItem("auth-credentials");
-        
-        console.log('🔐 Verificando autenticação:');
-        console.log('  - Usuário salvo:', storedUser);
-        console.log('  - Credenciais salvas:', !!storedCredentials);
-        
-        if (!storedUser || !storedCredentials) {
-          console.error('❌ Usuário não está autenticado!');
-          setError('Usuário não está autenticado. Faça login primeiro.');
-          return;
-        }
-
         // Buscar dispositivos
         console.log('🔍 Iniciando busca de dispositivos...');
         const devicesResult = await fetchDevices(1, 50);

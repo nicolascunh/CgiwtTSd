@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge } from 'antd';
+import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, InputNumber, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge } from 'antd';
 import type { MenuProps } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
+import { Card as ShadcnCard, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge as ShadcnBadge } from '@/components/ui/badge';
+import { Progress as ShadcnProgress } from '@/components/ui/progress';
 // import packageJson from '../../package.json'; // Removido para evitar problemas de build
 import { 
   CarOutlined, 
@@ -23,27 +26,96 @@ import {
   BarChartOutlined,
   BulbOutlined,
   LockOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  MenuUnfoldOutlined,
+  MenuFoldOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
 import { useLogout } from '@refinedev/core';
 import { useTrackmaxApi } from '../hooks/useTrackmaxApi';
 // import { useTrackmaxRealtime } from '../hooks/useTrackmaxRealtime'; // Removido temporariamente
 import { useRateLimit } from '../hooks/useRateLimit';
-import { WelcomeScreen } from './WelcomeScreen';
+import { useProgressiveLoading } from '../hooks/useProgressiveLoading';
+import { usePriorityLoading } from '../hooks/usePriorityLoading';
+// import { WelcomeScreen } from './WelcomeScreen'; // Removido
+import { useDebounce } from '../hooks/useDebounce';
 // import { ConnectionDebug } from './ConnectionDebug'; // Removido temporariamente
 import { RateLimitStatus } from './RateLimitStatus';
 import { LargeScaleLoader } from './LargeScaleLoader';
+import { CardLoadingSkeleton } from './CardLoadingSkeleton';
+import { StatisticValueSkeleton, BadgeValueSkeleton, StatisticValue } from './ValueSkeleton';
+import { SplashScreen } from './SplashScreen';
+import { useSplashScreen } from '../hooks/useSplashScreen';
 import { getEventStyle, getEventLabel, getEventDescription } from '../utils/eventMapping';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { convertToKmh } from '../utils/speedUtils';
 import { LiveMap } from './LiveMap';
 import { GoogleMapsLiveMap } from './GoogleMapsLiveMap';
-import type { Device, Position, Event, ReportTrips, MaintenanceRecord, Driver } from '../types';
+import type { Device, Position, Event, ReportTrips, Driver, MaintenanceRecord } from '../types';
 import '../styles/dashboard.css';
 import '../styles/themes.css';
 import '../styles/responsive.css';
+
+interface MetricRingProps {
+  value: number;
+  total: number;
+  color: string;
+  centerPrimary: string;
+  centerSecondary?: string;
+  backgroundColor?: string;
+}
+
+const MetricRing: React.FC<MetricRingProps> = ({
+  value,
+  total,
+  color,
+  centerPrimary,
+  centerSecondary,
+  backgroundColor = '#e2e8f0',
+}) => {
+  const percentage = total > 0 ? Math.min(Math.max((value / total) * 100, 0), 100) : 0;
+  return (
+    <div className="relative flex h-20 w-20 items-center justify-center">
+      <div
+        className="h-full w-full rounded-full"
+        style={{
+          background: `conic-gradient(${color} ${percentage}%, ${backgroundColor} ${percentage}% 100%)`,
+        }}
+      />
+      <div className="absolute flex h-12 w-12 flex-col items-center justify-center rounded-full bg-white text-center shadow-sm">
+        <span className="text-sm font-semibold text-slate-900">{centerPrimary}</span>
+        {centerSecondary && (
+          <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+            {centerSecondary}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+interface MetricCardProps {
+  icon: React.ReactNode;
+  title: string;
+  ring: React.ReactNode;
+  summary: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
+const MetricCard: React.FC<MetricCardProps> = ({ icon, title, ring, summary, footer }) => (
+  <div className="flex flex-col rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <div className="flex items-center gap-2">
+      <span className="text-xl">{icon}</span>
+      <span className="text-sm font-semibold text-slate-700">{title}</span>
+    </div>
+    <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {ring}
+      <div className="flex-1 text-sm text-slate-600">{summary}</div>
+    </div>
+    {footer && <div className="mt-6 text-xs font-medium text-slate-500">{footer}</div>}
+  </div>
+);
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
@@ -65,7 +137,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [trips, setTrips] = useState<ReportTrips[]>([]);
-  const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
+  const [partialTrips, setPartialTrips] = useState<ReportTrips[]>([]);
+  const [isLoadingPartial, setIsLoadingPartial] = useState(false);
   
   // Estados para paginação de eventos
   const [currentEventPage, setCurrentEventPage] = useState(0);
@@ -83,12 +156,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     errors: [] as string[]
   });
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [maintenances, setMaintenances] = useState<MaintenanceRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().subtract(24, 'hour'), dayjs()]);
+  
+  // Debounce para evitar requisições desnecessárias
+  const debouncedDateRange = useDebounce(dateRange, 500);
+  
+  // Splash screen
+  const { splashState, hideSplash, showSplash } = useSplashScreen();
   
   // Estados para busca e filtro
   const [searchPlates, setSearchPlates] = useState<string>('');
@@ -98,12 +178,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   
   // Estado para preço do combustível
   const [fuelPrice, setFuelPrice] = useState<number>(5.5);
+  const [fuelPriceOverrides, setFuelPriceOverrides] = useState<Record<number, number>>({});
+  
+  // Estado para busca de veículos no card de eficiência
+  const [vehicleEfficiencySearch, setVehicleEfficiencySearch] = useState<string>('');
+  
+  // Estados para filtros de ordenação dos cards
+  const [offline72hSortOrder, setOffline72hSortOrder] = useState<'oldest' | 'newest'>('oldest');
+  const [powerCutSortOrder, setPowerCutSortOrder] = useState<'oldest' | 'newest'>('oldest');
+  const [isRangeUpdating, setIsRangeUpdating] = useState(false);
+  const [filteredDeviceIds, setFilteredDeviceIds] = useState<number[] | null>(null);
+  const lastTripsFetchSignature = useRef<string>('');
   
   // Estado para loading de frota grande
   const [isLargeFleetLoading, setIsLargeFleetLoading] = useState<boolean>(false);
   
-  // Estado para tela de boas-vindas
-  const [showWelcome, setShowWelcome] = useState<boolean>(false);
+  // Estado para animação do dashboard
+  const [isDashboardVisible, setIsDashboardVisible] = useState<boolean>(false);
   
   // Hook para gerenciar rate limiting
   const { rateLimitState, resetRateLimit, isRateLimited } = useRateLimit();
@@ -122,13 +213,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // Verificar se deve mostrar tela de boas-vindas
-  useEffect(() => {
-    const welcomeCompleted = localStorage.getItem('welcome-completed');
-    if (!welcomeCompleted) {
-      setShowWelcome(true);
-    }
-  }, []);
+  // Removido: verificação de tela de boas-vindas
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
@@ -144,6 +229,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     
     return plates.map(plate => ({ value: plate, label: plate }));
   }, [allDevices]);
+
+  const effectiveDevices = useMemo(() => {
+    if (!allDevices || allDevices.length === 0) {
+      return [] as Device[];
+    }
+    if (filteredDeviceIds && filteredDeviceIds.length > 0) {
+      const allowedIds = new Set(filteredDeviceIds);
+      return allDevices.filter(device => allowedIds.has(device.id));
+    }
+    return allDevices;
+  }, [allDevices, filteredDeviceIds]);
+
+  const activeDeviceIds = useMemo(
+    () => effectiveDevices.map(device => device.id),
+    [effectiveDevices],
+  );
+  const activeDeviceIdSet = useMemo(() => new Set(activeDeviceIds), [activeDeviceIds]);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -160,7 +262,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       setActiveTab('devices');
     }
   }, [location.pathname]);
-  const { fetchDevices, fetchPositions, fetchEvents, fetchTrips, fetchMaintenances, fetchDrivers, loading, error } = useTrackmaxApi();
+  const { fetchDevices, fetchPositions, fetchEvents, fetchTrips, fetchDrivers, loading, error } = useTrackmaxApi();
+  const { 
+    loadingStates, 
+    loadDataProgressively 
+  } = useProgressiveLoading();
+
+  const {
+    loadingStates: priorityLoadingStates,
+    currentPriority,
+    updateLoadingState: updatePriorityLoading,
+    isPriorityLoading,
+    getLoadingMessage,
+    getPriorityOrder,
+    resetAllLoading: resetPriorityLoading
+  } = usePriorityLoading();
   const { t } = useLanguage();
   const { theme, toggleTheme } = useTheme();
   const isDarkTheme = theme === 'dark';
@@ -211,124 +327,62 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     }
   }, [location.pathname]);
 
-  // Carregar dados quando o componente montar
+  // Carregar dados com prioridades - VERSÃO SIMPLIFICADA
   useEffect(() => {
-    const loadData = async () => {
+    let isMounted = true;
+    
+    const loadInitialData = async () => {
       try {
-        console.log('🚀 DEBUG - Starting data load...');
-        console.log('🔧 DEBUG - isLargeFleetLoading state:', isLargeFleetLoading);
+        if (!isMounted) return;
+        
+        console.log('🚀 DEBUG - Starting initial data load...');
+        
+        // Carregar dispositivos
         const result = await fetchDevices();
         const devicesData = result.devices || [];
-        console.log('📱 DEBUG - Devices loaded:', devicesData.length, devicesData);
+        console.log('📱 DEBUG - Devices loaded:', devicesData.length);
         setAllDevices(devicesData);
         setDevices(devicesData);
         
-        // Carregar posições de todos os dispositivos
         if (devicesData.length > 0) {
-          console.log('🔍 Carregando posições para todos os dispositivos no Dashboard...');
           const deviceIds = devicesData.map(d => d.id);
           
-          // Para frotas grandes (>1000 veículos), limitar o período para evitar timeout
-          const isLargeFleet = deviceIds.length > 1000;
-          const adjustedRangeStart = isLargeFleet 
-            ? new Date(Date.now() - 6 * 60 * 60 * 1000) // 6 horas para frotas grandes
-            : rangeStartDate;
-          const adjustedRangeEnd = rangeEndDate;
-
-          const rangeStartIso = adjustedRangeStart.toISOString();
-          const rangeEndIso = adjustedRangeEnd.toISOString();
-          
-          if (isLargeFleet) {
-            console.log('🚀 Frota grande detectada, ajustando período para 6 horas para evitar timeout');
-            setIsLargeFleetLoading(true);
-          }
-
-          if (rangeStartDate > rangeEndDate) {
-            console.warn('⚠️ DEBUG - Intervalo inválido. Ignorando carregamento.');
-            return;
-          }
-
-          console.log('🗓️ DEBUG - Intervalo selecionado:', { from: rangeStartIso, to: rangeEndIso });
-
-          const positionsData = await fetchPositions(deviceIds, 1000);
-          console.log('📍 DEBUG - Posições carregadas no Dashboard:', positionsData.length, positionsData);
-          setPositions(positionsData);
-
-          const [eventsData, tripsData, maintenanceData, driversData] = await Promise.all([
-            fetchEvents({
+          // Carregar trips para performance
+          const tripsData = await fetchTrips({
               deviceIds,
-              from: rangeStartIso,
-              to: rangeEndIso,
-              types: [
-                'overspeed',
-                'engineBlock',
-                'powerCut',
-                'geofenceEnter',
-                'geofenceExit',
-                'harshBraking',
-                'harshAcceleration',
-                'harshCornering',
-                'idle',
-                'ignitionOn',
-                'ignitionOff',
-              ],
-              pageSize: 500,
-            }),
-            fetchTrips({
-              deviceIds,
-              from: rangeStartIso,
-              to: rangeEndIso,
-            }),
-            fetchMaintenances({ deviceIds }),
-            fetchDrivers(),
-          ]);
-
-          console.log('🚨 DEBUG - Events loaded:', {
-            count: eventsData.length,
-            events: eventsData.slice(0, 3), // Mostrar apenas os primeiros 3 para debug
-            types: eventsData.map(e => e.type).slice(0, 10),
-            dateRange: { from: rangeStartIso, to: rangeEndIso },
-            deviceIds: deviceIds.slice(0, 5) // Mostrar apenas os primeiros 5 devices
+            from: rangeStartDate.toISOString(),
+            to: rangeEndDate.toISOString(),
           });
-          console.log('🛣️ DEBUG - Trips loaded:', tripsData.length, tripsData);
-          setEvents(eventsData);
           setTrips(tripsData);
-          setMaintenances(maintenanceData);
+          console.log('🛠️ DEBUG - Trips loaded:', tripsData.length);
+          
+          // Carregar motoristas
+          const driversData = await fetchDrivers();
           setDrivers(driversData);
-        } else {
-          console.log('⚠️ DEBUG - No devices, setting empty arrays');
-          setEvents([]);
-          setTrips([]);
-          setMaintenances([]);
-          setDrivers([]);
+          console.log('👥 DEBUG - Drivers loaded:', driversData.length);
         }
-      } catch (err) {
-        console.error('Erro ao carregar dados:', err);
-      } finally {
-        // Sempre resetar o loading de frota grande
-        setIsLargeFleetLoading(false);
+        
+        // Finalizar carregamento
+        if (isMounted) {
+          hideSplash();
+        }
+        
+        } catch (err) {
+        console.error('Erro ao carregar dados iniciais:', err);
+        if (isMounted) {
+          hideSplash();
+        }
       }
     };
 
-    loadData();
-  }, [rangeStartDate, rangeEndDate]);
+    loadInitialData();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Apenas executa uma vez no mount
 
-  // Atualizar posições a cada 30 segundos
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      if (devices.length > 0) {
-        try {
-          const deviceIds = devices.map(d => d.id);
-          const positionsData = await fetchPositions(deviceIds, 1000);
-          setPositions(positionsData);
-        } catch (err) {
-          console.error('Erro ao atualizar posições:', err);
-        }
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [devices]);
+  // Removido carregamento automático de eventos - apenas dados básicos
 
   const handleLogout = () => {
     setLogoutModalVisible(true);
@@ -349,28 +403,139 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     setCurrentPage(1);
   };
 
-  // Função para executar busca com loading
-  const handleSearch = async () => {
-    setIsSearching(true);
-    setHasSearched(true);
+  const buildTripsSignature = useCallback((deviceIds: number[], start: Dayjs, end: Dayjs) => {
+    const sortedIds = [...deviceIds].sort((a, b) => a - b);
+    return `${sortedIds.join(',')}|${start.toDate().toISOString()}|${end.toDate().toISOString()}`;
+  }, []);
+
+  const fetchTripsForRange = useCallback(async (
+    deviceIds: number[],
+    start: Dayjs | null,
+    end: Dayjs | null,
+    options: { onStart?: () => void; onEnd?: () => void; skipSignatureCheck?: boolean } = {}
+  ) => {
+    console.log('🔍 DEBUG - fetchTripsForRange called:', { 
+      deviceIdsLength: deviceIds.length, 
+      start: start?.toISOString(), 
+      end: end?.toISOString(),
+      skipSignatureCheck: options.skipSignatureCheck
+    });
+    
+    if (!start || !end || !deviceIds.length) {
+      console.log('🔍 DEBUG - fetchTripsForRange early return - missing params');
+      options.onEnd?.(); // Garantir que onEnd seja chamado
+      return;
+    }
+
+    const signature = buildTripsSignature(deviceIds, start, end);
+    if (!options.skipSignatureCheck && lastTripsFetchSignature.current === signature) {
+      console.log('🔍 DEBUG - fetchTripsForRange early return - same signature');
+      options.onEnd?.(); // Garantir que onEnd seja chamado
+      return;
+    }
+
+    console.log('🔍 DEBUG - fetchTripsForRange calling onStart');
+    options.onStart?.();
     
     try {
-      // Simular delay de busca (você pode remover isso quando integrar com API real)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Aqui você pode adicionar lógica adicional de busca se necessário
-      console.log('🔍 Buscando dados para:', {
-        selectedPlates,
-        dateRange: dateRange.map(d => d.format('DD/MM/YYYY HH:mm'))
+      console.log('🔍 DEBUG - fetchTripsForRange calling fetchTrips');
+      const tripsData = await fetchTrips({
+        deviceIds,
+        from: start.toDate().toISOString(),
+        to: end.toDate().toISOString(),
       });
-      
+      console.log('🔍 DEBUG - fetchTripsForRange fetchTrips completed:', tripsData?.length || 0, 'trips');
+      setTrips(tripsData);
+      setPartialTrips([]);
+      lastTripsFetchSignature.current = signature;
     } catch (error) {
-      console.error('Erro na busca:', error);
+      console.error('🔍 DEBUG - fetchTripsForRange error:', error);
+      throw error;
     } finally {
+      console.log('🔍 DEBUG - fetchTripsForRange calling onEnd');
+      options.onEnd?.();
+    }
+  }, [buildTripsSignature, fetchTrips]);
+
+  const runSearch = useCallback(async (plates: string[]) => {
+    console.log('🔍 DEBUG - runSearch started:', { plates, allDevicesLength: allDevices.length });
+    
+    if (!allDevices.length) {
+      console.log('🔍 DEBUG - No devices available, returning');
+      return;
+    }
+    const [start, end] = dateRange;
+    if (!start || !end) {
+      console.log('🔍 DEBUG - No date range, returning');
+      return;
+    }
+
+    let matchingDeviceIds: number[] = [];
+
+    if (plates.length > 0) {
+      matchingDeviceIds = allDevices
+        .filter(device =>
+          plates.some(plate =>
+            device.name.toLowerCase().includes(plate.toLowerCase()) ||
+            device.uniqueId.toLowerCase().includes(plate.toLowerCase())
+          )
+        )
+        .map(device => device.id);
+
+      console.log('🔍 DEBUG - Matching devices found:', matchingDeviceIds.length);
+
+      if (matchingDeviceIds.length === 0) {
+        console.log('🔍 DEBUG - No matching devices, clearing data');
+        setFilteredDeviceIds([]);
+        setTrips([]);
+        setPartialTrips([]);
+        setIsSearching(false);
+        setHasSearched(true);
+        return;
+      }
+
+      setFilteredDeviceIds(matchingDeviceIds);
+    } else {
+      matchingDeviceIds = allDevices.map(device => device.id);
+      setFilteredDeviceIds(null);
+    }
+
+    setHasSearched(true);
+
+    try {
+      console.log('🔍 DEBUG - Starting fetchTripsForRange');
+      
+      // Timeout de segurança para evitar blur infinito
+      const timeoutId = setTimeout(() => {
+        console.log('🔍 DEBUG - Search timeout reached, forcing end');
+        setIsSearching(false);
+        setIsLargeFleetLoading(false);
+      }, 30000); // 30 segundos
+      
+      await fetchTripsForRange(matchingDeviceIds, start, end, {
+        onStart: () => {
+          console.log('🔍 DEBUG - fetchTripsForRange onStart');
+          setIsSearching(true);
+        },
+        onEnd: () => {
+          console.log('🔍 DEBUG - fetchTripsForRange onEnd');
+          clearTimeout(timeoutId);
+          setIsSearching(false);
+        },
+        skipSignatureCheck: true,
+      });
+      console.log('🔍 DEBUG - fetchTripsForRange completed successfully');
+    } catch (error) {
+      console.error('🔍 DEBUG - fetchTripsForRange error:', error);
       setIsSearching(false);
+    } finally {
       setIsLargeFleetLoading(false);
     }
-  };
+  }, [allDevices, dateRange, fetchTripsForRange]);
+
+  const handleSearch = useCallback(() => {
+    void runSearch(selectedPlates);
+  }, [runSearch, selectedPlates]);
 
   const confirmLogout = () => {
     logout();
@@ -380,6 +545,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const cancelLogout = () => {
     setLogoutModalVisible(false);
   };
+
+  useEffect(() => {
+    const [start, end] = debouncedDateRange;
+    if (!start || !end || activeDeviceIds.length === 0) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    fetchTripsForRange(activeDeviceIds, start, end, {
+      onStart: () => {
+        if (!isCancelled) {
+          setIsRangeUpdating(true);
+        }
+      },
+      onEnd: () => {
+        if (!isCancelled) {
+          setIsRangeUpdating(false);
+        }
+      },
+    }).catch(() => {
+      if (!isCancelled) {
+        setIsRangeUpdating(false);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [debouncedDateRange, activeDeviceIds, fetchTripsForRange]);
 
   // Função para selecionar dispositivo e carregar posições
   const handleDeviceSelect = async (device: Device) => {
@@ -486,12 +681,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   }, [allDevices]);
 
   const tripAggregation = useMemo(() => {
+    const activeTrips = isLoadingPartial ? partialTrips : trips;
     const statsMap = new Map<number, { distanceKm: number; trips: number; engineHours: number; fuel: number }>();
     let totalTrips = 0;
     let totalEngineHours = 0;
     let estimatedFuel = 0;
 
-    trips.forEach((trip) => {
+    activeTrips.forEach((trip) => {
       const distanceKm = (trip.distance || 0) / 1000;
       const durationRaw = trip.duration || 0;
       const engineHours = durationRaw > 86400 ? durationRaw / 3600000 : durationRaw / 3600;
@@ -523,7 +719,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       totalEngineHours,
       estimatedFuel,
     };
-  }, [trips, deviceMap]);
+  }, [trips, partialTrips, isLoadingPartial, deviceMap]);
 
   const { statsMap: tripStatsMap } = tripAggregation;
 
@@ -531,13 +727,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const metrics = new Map<number, { device: Device; distanceKm: number; trips: number; engineHours: number; idleHours: number; fuel: number; lastPosition?: Position }>();
 
     console.log('🔍 DEBUG - deviceMetrics calculation:', {
-      allDevicesLength: allDevices?.length,
+      effectiveDevicesLength: effectiveDevices.length,
       positionsLength: positions?.length,
       tripsLength: trips?.length,
       tripStatsMapSize: tripStatsMap?.size
     });
 
-    if (!(allDevices?.length)) {
+    if (!effectiveDevices.length) {
       console.log('⚠️ DEBUG - No devices available for metrics calculation');
       return metrics;
     }
@@ -580,8 +776,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     };
 
     positions.forEach((pos) => {
-      const deviceId = typeof pos.deviceId === 'string' ? Number(pos.deviceId) : pos.deviceId;
-      if (!Number.isFinite(deviceId)) {
+      const rawDeviceId = typeof pos.deviceId === 'string' ? Number(pos.deviceId) : pos.deviceId;
+      if (!Number.isFinite(rawDeviceId)) {
+        return;
+      }
+      const deviceId = Number(rawDeviceId);
+      if (!activeDeviceIdSet.has(deviceId)) {
         return;
       }
       const timestamp = parseTime(pos);
@@ -600,7 +800,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       list.sort((a, b) => parseTime(a) - parseTime(b));
     });
 
-    (allDevices || []).forEach((device) => {
+    effectiveDevices.forEach((device) => {
       const devicePositions = positionsByDevice.get(device.id) || [];
 
       console.log(`🔍 DEBUG - Processing device ${device.name} (${device.id}):`, {
@@ -710,7 +910,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     });
 
     return metrics;
-  }, [allDevices, positions, tripStatsMap, rangeStartDate, rangeEndDate]);
+  }, [effectiveDevices, positions, tripStatsMap, rangeStartDate, rangeEndDate, activeDeviceIdSet]);
 
   const deviceMetricsArray = useMemo(() => {
     const array = Array.from(deviceMetrics.values());
@@ -770,6 +970,118 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const totalEngineHours = totals.engine;
   const totalIdleHours = totals.idle;
   const estimatedFuel = totals.fuel;
+  
+  // Calcular eficiência real de combustível por dispositivo (km/l)
+  const deviceFuelEfficiency = useMemo(() => {
+    const efficiencyMap = new Map<number, { 
+      device: Device; 
+      efficiency: number; 
+      distance: number; 
+      fuel: number; 
+      fuelUsed: number;
+      fuelSource: 'real' | 'estimated' | 'none';
+      trips: number;
+      hasRealData: boolean;
+    }>();
+
+    console.log('🔍 DEBUG - deviceMetricsArray length:', deviceMetricsArray.length);
+    console.log('🔍 DEBUG - deviceMetricsArray sample:', deviceMetricsArray.slice(0, 3));
+
+    deviceMetricsArray.forEach(({ device, distanceKm, fuel, trips }) => {
+      let efficiency = 0;
+      let hasRealData = false;
+      let fuelUsed = 0;
+      let fuelSource: 'real' | 'estimated' | 'none' = 'none';
+
+      if (fuel > 0 && distanceKm > 0) {
+        // Calcular eficiência real baseada em dados de trips
+        efficiency = distanceKm / fuel;
+        hasRealData = true;
+        fuelUsed = fuel;
+        fuelSource = 'real';
+        console.log(`🔍 DEBUG - ${device.name}: ${distanceKm}km / ${fuel}L = ${efficiency.toFixed(2)} km/l (dados reais)`);
+      } else {
+        const consumption = (device.attributes as { consumption?: { kmPerL?: number } } | undefined)?.consumption?.kmPerL;
+        if (consumption && consumption > 0 && distanceKm > 0) {
+          efficiency = consumption;
+          fuelUsed = distanceKm / consumption;
+          fuelSource = 'estimated';
+          hasRealData = false; // Dados teóricos, não reais
+          console.log(`🔍 DEBUG - ${device.name}: ${efficiency} km/l (dados teóricos) -> consumo estimado ${fuelUsed.toFixed(2)}L`);
+        } else if (fuel > 0) {
+          fuelUsed = fuel;
+          fuelSource = 'real';
+          console.log(`🔍 DEBUG - ${device.name}: sem distância, mas registrou ${fuel}L consumidos`);
+        } else {
+          console.log(`🔍 DEBUG - ${device.name}: sem dados de eficiência`);
+        }
+      }
+
+      efficiencyMap.set(device.id, {
+        device,
+        efficiency,
+        distance: distanceKm,
+        fuel,
+        fuelUsed,
+        fuelSource,
+        trips,
+        hasRealData
+      });
+    });
+
+    console.log('🔍 DEBUG - efficiencyMap size:', efficiencyMap.size);
+    return efficiencyMap;
+  }, [deviceMetricsArray]);
+
+  // Calcular eficiência média da frota (km/l)
+  const averageFleetEfficiency = useMemo(() => {
+    const devicesWithData = Array.from(deviceFuelEfficiency.values())
+      .filter(item => item.efficiency > 0);
+    
+    console.log('🔍 DEBUG - devicesWithData length:', devicesWithData.length);
+    
+    if (devicesWithData.length === 0) {
+      console.log('🔍 DEBUG - Nenhum dispositivo com dados de eficiência');
+      return 0;
+    }
+    
+    // Média ponderada por distância
+    const totalDistance = devicesWithData.reduce((sum, item) => sum + item.distance, 0);
+    if (totalDistance === 0) {
+      console.log('🔍 DEBUG - Distância total é zero');
+      return 0;
+    }
+    
+    const weightedEfficiency = devicesWithData.reduce((sum, item) => {
+      const weight = item.distance / totalDistance;
+      return sum + (item.efficiency * weight);
+    }, 0);
+    
+    console.log('🔍 DEBUG - Eficiência média da frota:', weightedEfficiency.toFixed(2), 'km/l');
+    return weightedEfficiency;
+  }, [deviceFuelEfficiency]);
+
+  const getEffectiveFuelPrice = useCallback(
+    (deviceId: number) => fuelPriceOverrides[deviceId] ?? fuelPrice,
+    [fuelPriceOverrides, fuelPrice]
+  );
+
+  const handleFuelPriceOverrideChange = useCallback(
+    (deviceId: number, value: number | null) => {
+      setFuelPriceOverrides(prev => {
+        const next = { ...prev };
+        if (value === null || Number.isNaN(value)) {
+          delete next[deviceId];
+        } else if (Math.abs(value - fuelPrice) < 0.0001) {
+          delete next[deviceId];
+        } else {
+          next[deviceId] = value;
+        }
+        return next;
+      });
+    },
+    [fuelPrice]
+  );
 
   const tripsByDeviceList = useMemo(
     () => {
@@ -1113,43 +1425,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   // Função getEventStyle movida para utils/eventMapping.ts
   const describeEvent = (type: string) => getEventDescription(type);
 
-  const recentEvents = useMemo(() => {
-    console.log('🔍 DEBUG - recentEvents calculation:', {
-      eventsLength: events.length,
-      events: events.slice(0, 5), // Mostrar apenas os primeiros 5 para debug
-      eventTypes: events.map(e => e.type).slice(0, 10)
-    });
-    
-    if (!events.length) {
-      console.log('⚠️ Nenhum evento encontrado para recentEvents');
-      return [];
-    }
-    
-    const sorted = [...events].sort((a, b) => {
-      const aTime = a.serverTime ? new Date(a.serverTime).getTime() : 0;
-      const bTime = b.serverTime ? new Date(b.serverTime).getTime() : 0;
-      return bTime - aTime;
-    });
-    
-    const recent = sorted.slice(0, 10);
-    console.log('📋 DEBUG - recentEvents result:', {
-      totalEvents: events.length,
-      recentCount: recent.length,
-      recentTypes: recent.map(e => e.type)
-    });
-    
-    return recent;
-  }, [events]);
+  // Removido recentEvents - não carregamos mais eventos
+  const recentEvents: Event[] = [];
 
-  // Calcular eventos paginados
-  const paginatedEvents = useMemo(() => {
-    const startIndex = currentEventPage * EVENTS_PER_PAGE;
-    const endIndex = startIndex + EVENTS_PER_PAGE;
-    return recentEvents.slice(startIndex, endIndex);
-  }, [recentEvents, currentEventPage, EVENTS_PER_PAGE]);
-
-  // Calcular total de páginas
-  const totalEventPages = Math.ceil(recentEvents.length / EVENTS_PER_PAGE);
+  // Removido paginação de eventos - não carregamos mais eventos
+  const paginatedEvents: Event[] = [];
+  const totalEventPages = 0;
 
   const behaviourMetrics = useMemo(() => {
     const distance = Math.max(totalDistanceKm, 0.01);
@@ -1188,43 +1469,73 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const now = new Date();
     const seventyTwoHoursAgo = new Date(now.getTime() - 72 * 60 * 60 * 1000);
     
-    return (allDevices || [])
+    console.log('🔍 DEBUG - offlineDevices72h calculation:');
+    console.log('  - effectiveDevices length:', effectiveDevices?.length || 0);
+    console.log('  - positions length:', positions?.length || 0);
+    console.log('  - seventyTwoHoursAgo:', seventyTwoHoursAgo.toISOString());
+    console.log('  - now:', now.toISOString());
+    
+    const result = (effectiveDevices || [])
       .map(device => {
-        // Encontrar a posição mais recente do dispositivo
-        const devicePosition = positions.find(pos => pos.deviceId === device.id);
-        if (!devicePosition) return null;
+        // Usar o lastUpdate do dispositivo diretamente
+        if (!device.lastUpdate) {
+          console.log(`  - Device ${device.name} (${device.id}): No lastUpdate`);
+          return null;
+        }
         
-        const lastUpdate = new Date(devicePosition.deviceTime);
+        const lastUpdate = new Date(device.lastUpdate);
         const isOffline72h = lastUpdate < seventyTwoHoursAgo;
+        
+        console.log(`  - Device ${device.name} (${device.id}): lastUpdate=${lastUpdate.toISOString()}, isOffline72h=${isOffline72h}`);
         
         if (isOffline72h) {
           return {
             device,
-            lastUpdate: devicePosition.deviceTime
+            lastUpdate: device.lastUpdate,
+            lastUpdateDate: lastUpdate
           };
         }
         return null;
       })
-      .filter((item): item is { device: Device; lastUpdate: string } => item !== null);
-  }, [allDevices, positions]);
+      .filter((item): item is { device: Device; lastUpdate: string; lastUpdateDate: Date } => item !== null)
+      .sort((a, b) => {
+        if (offline72hSortOrder === 'oldest') {
+          return a.lastUpdateDate.getTime() - b.lastUpdateDate.getTime();
+        } else {
+          return b.lastUpdateDate.getTime() - a.lastUpdateDate.getTime();
+        }
+      });
+    
+    console.log('  - Result length:', result.length);
+    return result;
+  }, [effectiveDevices, positions, offline72hSortOrder]);
 
   const powerCutDevices = useMemo(() => {
-    return (allDevices || [])
+    return (effectiveDevices || [])
       .map(device => {
         // Verificar se o dispositivo tem powerCut == true nos attributes
         const powerCut = device.attributes?.powerCut;
         if (powerCut === true) {
           // Encontrar a posição mais recente do dispositivo
           const devicePosition = positions.find(pos => pos.deviceId === device.id);
+          const lastUpdate = devicePosition?.deviceTime || device.lastUpdate || new Date().toISOString();
           return {
             device,
-            lastUpdate: devicePosition?.deviceTime || device.lastUpdate || new Date().toISOString()
+            lastUpdate,
+            lastUpdateDate: new Date(lastUpdate)
           };
         }
         return null;
       })
-      .filter((item): item is { device: Device; lastUpdate: string } => item !== null);
-  }, [allDevices, positions]);
+      .filter((item): item is { device: Device; lastUpdate: string; lastUpdateDate: Date } => item !== null)
+      .sort((a, b) => {
+        if (powerCutSortOrder === 'oldest') {
+          return a.lastUpdateDate.getTime() - b.lastUpdateDate.getTime();
+        } else {
+          return b.lastUpdateDate.getTime() - a.lastUpdateDate.getTime();
+        }
+      });
+  }, [effectiveDevices, positions, powerCutSortOrder]);
 
   const harshBrakingCount = useMemo(() => {
     // Simular contagem de frenagens bruscas baseada nos eventos
@@ -1242,7 +1553,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   }, [recentEvents]);
 
   // Filtrar dispositivos baseado no termo de busca, filtro e placas selecionadas
-  const filteredDevices = (allDevices || []).filter(device => {
+  const filteredDevices = (effectiveDevices || []).filter(device => {
     const matchesSearch = device.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          device.uniqueId.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -1271,9 +1582,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const paginatedDevices = filteredDevices.slice(0, currentPage * pageSize);
 
   // Contadores
-  const totalDevices = (allDevices || []).length;
-  const activeVehicles = (allDevices || []).filter(device => !device.disabled).length;
-  const blockedVehicles = (allDevices || []).filter(device => {
+  const totalDevices = effectiveDevices.length;
+  const activeVehicles = effectiveDevices.filter(device => !device.disabled).length;
+  const blockedVehicles = effectiveDevices.filter(device => {
     if (device.disabled) {
       return false;
     }
@@ -1281,18 +1592,128 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const output = attributes && (attributes['output'] === true || attributes['engineBlocked'] === true || attributes['engineBlock'] === true);
     return Boolean(output);
   }).length;
-  const onlineVehicles = (allDevices || []).filter(device => !device.disabled && device.status === 'online').length;
+  const onlineVehicles = effectiveDevices.filter(device => !device.disabled && device.status === 'online').length;
   const offlineVehicles = Math.max(activeVehicles - onlineVehicles, 0);
   const inactiveVehicles = Math.max(totalDevices - activeVehicles, 0);
+  const statusDistribution = useMemo(() => {
+    const total = onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles;
+    const safeTotal = Math.max(total, 1);
+    const circumference = 2 * Math.PI * 80;
+    const baseStatuses = [
+      {
+        key: 'online',
+        label: 'Online',
+        count: onlineVehicles,
+        color: '#10b981',
+        summaryGradient: 'from-emerald-50 to-emerald-100',
+        summaryBorder: 'border-emerald-200',
+        summaryText: 'text-emerald-700',
+        summaryValue: 'text-emerald-800',
+        badgeLabel: 'OK',
+        badgeClass: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+        legendBorder: 'border-emerald-100',
+        legendAccent: 'bg-emerald-500/10',
+        legendDot: 'bg-emerald-500',
+        legendText: 'text-emerald-700',
+        legendMuted: 'text-emerald-600',
+        progressClass: 'bg-emerald-500'
+      },
+      {
+        key: 'offline',
+        label: 'Offline',
+        count: offlineVehicles,
+        color: '#ef4444',
+        summaryGradient: 'from-rose-50 to-rose-100',
+        summaryBorder: 'border-rose-200',
+        summaryText: 'text-rose-700',
+        summaryValue: 'text-rose-800',
+        badgeLabel: 'Atenção',
+        badgeClass: 'bg-rose-500 hover:bg-rose-600 text-white',
+        legendBorder: 'border-rose-100',
+        legendAccent: 'bg-rose-500/10',
+        legendDot: 'bg-rose-500',
+        legendText: 'text-rose-700',
+        legendMuted: 'text-rose-600',
+        progressClass: 'bg-rose-500'
+      },
+      {
+        key: 'blocked',
+        label: 'Bloqueados',
+        count: blockedVehicles,
+        color: '#f97316',
+        summaryGradient: 'from-amber-50 to-amber-100',
+        summaryBorder: 'border-amber-200',
+        summaryText: 'text-amber-700',
+        summaryValue: 'text-amber-800',
+        badgeLabel: 'Bloqueado',
+        badgeClass: 'bg-amber-500 hover:bg-amber-600 text-white',
+        legendBorder: 'border-amber-100',
+        legendAccent: 'bg-amber-500/10',
+        legendDot: 'bg-amber-500',
+        legendText: 'text-amber-700',
+        legendMuted: 'text-amber-600',
+        progressClass: 'bg-amber-500'
+      },
+      {
+        key: 'inactive',
+        label: 'Inativos',
+        count: inactiveVehicles,
+        color: '#6b7280',
+        summaryGradient: 'from-slate-50 to-slate-100',
+        summaryBorder: 'border-slate-200',
+        summaryText: 'text-slate-700',
+        summaryValue: 'text-slate-800',
+        badgeLabel: 'Inativo',
+        badgeClass: 'bg-slate-500 hover:bg-slate-600 text-white',
+        legendBorder: 'border-slate-200',
+        legendAccent: 'bg-slate-500/10',
+        legendDot: 'bg-slate-500',
+        legendText: 'text-slate-700',
+        legendMuted: 'text-slate-600',
+        progressClass: 'bg-slate-500'
+      }
+    ];
+
+    let cumulativeDash = 0;
+
+    const breakdown = baseStatuses.map((status) => {
+      const ratio = safeTotal > 0 ? status.count / safeTotal : 0;
+      const precisePercent = ratio * 100;
+      const percent = Math.round(precisePercent);
+      const dash = ratio * circumference;
+      const dashOffset = -cumulativeDash;
+      cumulativeDash += dash;
+
+      return {
+        ...status,
+        ratio,
+        percent,
+        precisePercent,
+        dash,
+        dashOffset
+      };
+    });
+
+    return {
+      total,
+      safeTotal,
+      circumference,
+      breakdown
+    };
+  }, [onlineVehicles, offlineVehicles, blockedVehicles, inactiveVehicles]);
   const availabilityPercentage = totalDevices > 0 ? (onlineVehicles / totalDevices) * 100 : 0;
   const blockedPercentage = activeVehicles > 0 ? (blockedVehicles / activeVehicles) * 100 : 0;
-  const activeRangeVehicles = (allDevices || []).filter(device => {
+  const availabilityPercentLabel = formatNumber(availabilityPercentage, 1);
+  const blockedPercentLabel = formatNumber(blockedPercentage, 1);
+  const activeRangeVehicles = effectiveDevices.filter(device => {
     if (!device.lastUpdate) {
       return false;
     }
     const lastUpdateDate = new Date(device.lastUpdate);
     return lastUpdateDate >= rangeStartDate && lastUpdateDate <= rangeEndDate;
   }).length;
+  const activeRangePercent = totalDevices > 0 ? (activeRangeVehicles / totalDevices) * 100 : 0;
+  const activeRangePercentLabel = formatNumber(activeRangePercent, 1);
 
   const engineHours = totalEngineHours;
   const idleHours = totalIdleHours;
@@ -1326,7 +1747,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   }, [engineHours, dateRange]);
 
   const onlineDevicesList = useMemo(() => {
-    return (allDevices || [])
+    return (effectiveDevices || [])
       .filter(device => !device.disabled && device.status === 'online')
       .sort((a, b) => {
         const aTime = a.lastUpdate ? new Date(a.lastUpdate).getTime() : 0;
@@ -1342,10 +1763,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           lastUpdate: device.lastUpdate,
         };
       });
-  }, [allDevices, positions]);
+  }, [effectiveDevices, positions]);
 
   const offlineDevicesList = useMemo(() => {
-    return (allDevices || [])
+    return (effectiveDevices || [])
       .filter(device => !device.disabled && device.status !== 'online')
       .sort((a, b) => {
         const aTime = a.lastUpdate ? new Date(a.lastUpdate).getTime() : 0;
@@ -1361,7 +1782,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           lastUpdate: device.lastUpdate,
         };
       });
-  }, [allDevices, positions]);
+  }, [effectiveDevices, positions]);
 
   const driverMetrics = useMemo(() => {
     if (!drivers.length) {
@@ -1416,16 +1837,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     ? 'Nenhum motorista cadastrado'
     : 'Nenhum motorista com validade registrada';
 
-  const upcomingMaintenances = useMemo(() => {
-    if (!maintenances.length) {
-      return [] as MaintenanceRecord[];
-    }
-
-    return maintenances
-      .slice()
-      .sort((a, b) => (a.start || 0) - (b.start || 0))
-      .slice(0, 5);
-  }, [maintenances]);
+  // Card de manutenções vazio - será implementado com módulo completo
+  const upcomingMaintenances = useMemo((): MaintenanceRecord[] => {
+    return [];
+  }, []);
 
   // Renderizar conteúdo baseado na aba ativa
   const renderContent = () => {
@@ -1433,8 +1848,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             case 'dashboard':
         return (
           <div style={{ padding: isMobile ? '16px' : '24px', position: 'relative' }}>
-            {/* Loading Overlay */}
-            {isSearching && (
+            {/* Barra de Progresso no Topo */}
+            { (isSearching || isRangeUpdating) && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '3px',
+                backgroundColor: '#e2e8f0',
+                zIndex: 10000
+              }}>
+                <div style={{
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
+                  animation: 'progressBar 2s ease-in-out infinite',
+                  width: '100%'
+                }} />
+              </div>
+            )}
+
+            {/* Loading Overlay Melhorado */}
+            { (isSearching || isRangeUpdating) && (
               <div
                 style={{
                   position: 'fixed',
@@ -1442,27 +1877,57 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center',
                   zIndex: 9999,
-                  backdropFilter: 'blur(2px)',
+                  transition: 'all 0.3s ease-in-out',
                 }}
               >
+                <div style={{
+                  background: 'white',
+                  borderRadius: '16px',
+                  padding: '32px',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+                  border: '1px solid rgba(0, 0, 0, 0.05)',
+                  maxWidth: '400px',
+                  textAlign: 'center'
+                }}>
                 <Spin size="large" />
-                <Text style={{ marginTop: '16px', fontSize: '16px', color: '#1a1a2e' }}>
-                  {isLargeFleetLoading 
+                  <Text style={{ 
+                    marginTop: '20px', 
+                    fontSize: '16px', 
+                    color: '#1a1a2e',
+                    fontWeight: '500',
+                    display: 'block'
+                  }}>
+                    {isRangeUpdating
+                      ? 'Atualizando dados do período selecionado...'
+                      : isLargeFleetLoading
                     ? 'Carregando dados da frota grande (pode levar alguns minutos)...'
-                    : 'Buscando dados das placas no período selecionado...'
-                  }
+                        : 'Buscando dados das placas no período selecionado...'}
                 </Text>
-                {isLargeFleetLoading && (
-                  <Text style={{ marginTop: '8px', fontSize: '14px', color: '#666' }}>
+                  {isSearching && isLargeFleetLoading && (
+                    <Text style={{ 
+                      marginTop: '12px', 
+                      fontSize: '14px', 
+                      color: '#666',
+                      display: 'block'
+                    }}>
                     Otimizando período para 6 horas para melhor performance
                   </Text>
                 )}
+                  <div style={{
+                    marginTop: '16px',
+                    fontSize: '12px',
+                    color: '#999',
+                    opacity: 0.8
+                  }}>
+                    Por favor, aguarde...
+                  </div>
+                </div>
               </div>
             )}
             <div
@@ -1507,8 +1972,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     onChange={setSearchPlates}
                     onSelect={(value) => {
                       if (value && !selectedPlates.includes(value)) {
-                        setSelectedPlates([...selectedPlates, value]);
+                        const nextPlates = [...selectedPlates, value];
+                        setSelectedPlates(nextPlates);
                         setSearchPlates('');
+                        if (filteredDeviceIds !== null) {
+                          void runSearch(nextPlates);
+                        }
                       }
                     }}
                     options={plateOptions}
@@ -1544,13 +2013,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     style={{ 
                       width: '100%', 
                       height: '40px',
-                      background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
+                      background: isSearching 
+                        ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
+                        : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
                       border: 'none',
-                      boxShadow: '0 4px 12px rgba(96, 165, 250, 0.3)'
+                      boxShadow: isSearching 
+                        ? '0 2px 8px rgba(148, 163, 184, 0.3)'
+                        : '0 4px 12px rgba(96, 165, 250, 0.3)',
+                      transition: 'all 0.3s ease'
                     }}
                     icon={!isSearching ? <SearchOutlined /> : undefined}
                   >
-                    {isSearching ? 'Buscando...' : 'Buscar'}
+                    {isSearching ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Spin size="small" />
+                        Buscando...
+                      </span>
+                    ) : (
+                      'Buscar'
+                    )}
                   </Button>
                 </Col>
               </Row>
@@ -1562,7 +2043,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     <Tag
                       key={index}
                       closable
-                      onClose={() => setSelectedPlates(selectedPlates.filter((_, i) => i !== index))}
+                      onClose={() => {
+                        const nextPlates = selectedPlates.filter((_, i) => i !== index);
+                        setSelectedPlates(nextPlates);
+                        if (filteredDeviceIds !== null) {
+                          void runSearch(nextPlates);
+                        }
+                      }}
                       color="blue"
                     >
                       {plate}
@@ -1585,100 +2072,270 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
               />
             )}
             
-            {/* KPIs Principais */}
-            <Row gutter={[isMobile ? 16 : 24, isMobile ? 16 : 24]} style={{ marginBottom: isMobile ? '16px' : '32px' }}>
-              <Col xs={12} sm={6}>
-                <Card 
-                  className="dashboard-card theme-gradient-primary"
-                  style={{ 
-                    borderRadius: '12px', 
-                    boxShadow: 'var(--shadow-medium)',
-                    border: 'none',
-                    color: 'white'
-                  }}
-                >
-                  <Statistic
-                    title={<span style={{ color: 'white' }}>Veículos Ativos</span>}
-                    value={activeVehicles}
-                    prefix={<CarOutlined style={{ color: 'white' }} />}
-                    valueStyle={{ color: 'white', fontSize: '32px' }}
-                  />
-                  <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
-                    Frota total: {totalDevices}
+            {!isPriorityLoading('top-cards') ? (
+              <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricCard
+                  icon="🚗"
+                  title="Veículos Ativos"
+                  ring={
+                    <MetricRing
+                      value={activeVehicles}
+                      total={Math.max(totalDevices, 1)}
+                      color="#2563eb"
+                      centerPrimary={formatNumber(activeVehicles)}
+                      centerSecondary=""
+                    />
+                  }
+                  summary={
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-slate-900">
+                        {formatNumber(activeVehicles)} veículos ativos
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Frota total considerada: {formatNumber(totalDevices)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Inativos: {formatNumber(inactiveVehicles)}
+                      </p>
                   </div>
-                </Card>
-              </Col>
-              <Col xs={12} sm={6}>
-                <Card 
-                  className="dashboard-card theme-gradient-primary"
-                  style={{ 
-                    borderRadius: '12px', 
-                    boxShadow: 'var(--shadow-medium)',
-                    border: 'none',
-                    color: 'white'
-                  }}
-                >
-                  <Statistic
-                    title={<span style={{ color: 'white' }}>Veículos Bloqueados</span>}
-                    value={blockedVehicles}
-                    prefix={<LockOutlined style={{ color: 'white' }} />}
-                    valueStyle={{ color: 'white', fontSize: '32px' }}
-                  />
-                  <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
-                    {formatNumber(blockedPercentage, 1)}% da frota
+                  }
+                  footer={
+                    <span>
+                      Filtro aplicado: {filteredDeviceIds ? `${formatNumber(activeDeviceIds.length)} veículo(s)` : 'todos os veículos'}
+                    </span>
+                  }
+                />
+
+                <MetricCard
+                  icon="🔒"
+                  title="Veículos Bloqueados"
+                  ring={
+                    <MetricRing
+                      value={blockedVehicles}
+                      total={Math.max(activeVehicles, 1)}
+                      color="#f97316"
+                      centerPrimary={formatNumber(blockedVehicles)}
+                      centerSecondary=""
+                    />
+                  }
+                  summary={
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-slate-900">
+                        {formatNumber(blockedVehicles)} veículos bloqueados
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Representa {blockedPercentLabel}% da frota ativa
+                      </p>
+                        </div>
+                  }
+                  footer={<span>Veículos ativos monitorados: {formatNumber(activeVehicles)}</span>}
+                />
+
+                <MetricCard
+                  icon="📊"
+                  title="Disponibilidade"
+                  ring={
+                    <MetricRing
+                      value={onlineVehicles}
+                      total={Math.max(onlineVehicles + offlineVehicles, 1)}
+                      color="#3b82f6"
+                      centerPrimary={totalDevices > 0 ? `${Math.round(availabilityPercentage)}%` : '0%'}
+                      centerSecondary=""
+                    />
+                  }
+                  summary={
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-slate-900">
+                        {formatNumber(onlineVehicles)} veículos online
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Offline: {formatNumber(offlineVehicles)}
+                      </p>
                   </div>
-                </Card>
-              </Col>
-              <Col xs={12} sm={6}>
-                <Card 
-                  className="dashboard-card theme-gradient-primary"
-                  style={{ 
-                    borderRadius: '12px', 
-                    boxShadow: 'var(--shadow-medium)',
-                    border: 'none',
-                    color: 'white'
-                  }}
-                >
-                  <Statistic
-                    title={<span style={{ color: 'white' }}>Disponibilidade</span>}
-                    value={Number(availabilityPercentage.toFixed(1))}
-                    suffix="%"
-                    prefix={<div style={{ color: 'white', fontSize: '24px' }}>📊</div>}
-                    valueStyle={{ color: 'white', fontSize: '32px' }}
-                  />
-                  <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
-                    Online: {onlineVehicles} • Offline: {offlineVehicles}
+                  }
+                  footer={<span>Disponibilidade média: {availabilityPercentLabel}%</span>}
+                />
+
+                <MetricCard
+                  icon="⏰"
+                  title="Ativos no Período"
+                  ring={
+                    <MetricRing
+                      value={activeRangeVehicles}
+                      total={Math.max(totalDevices, 1)}
+                      color="#8b5cf6"
+                      centerPrimary={formatNumber(activeRangeVehicles)}
+                      centerSecondary=""
+                    />
+                  }
+                  summary={
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-slate-900">
+                        {formatNumber(activeRangeVehicles)} veículos atualizaram
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Cobertura do período: {activeRangePercentLabel}%
+                      </p>
+                        </div>
+                  }
+                  footer={<span>Intervalo selecionado: {formattedRange}</span>}
+                />
+                      </div>
+            ) : (
+              <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <CardLoadingSkeleton key={index} height="220px" />
+                ))}
+                    </div>
+            )}
+
+            {/* Distribuição por Status */}
+            <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
+              <Col xs={24} lg={24} xl={24}>
+                <ShadcnCard className="w-full border border-slate-200 bg-white/80 shadow-lg backdrop-blur-sm">
+                  <CardHeader className="flex flex-col gap-1 pb-3 sm:flex-row sm:items-center sm:justify-between sm:pb-2">
+                    <CardTitle className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                      <BarChartOutlined className="text-blue-600" />
+                      Distribuição por Status
+                    </CardTitle>
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                      Atualização automática
                   </div>
-                </Card>
-              </Col>
-              <Col xs={12} sm={6}>
-                <Card 
-                  className="dashboard-card theme-gradient-primary"
-                  style={{ 
-                    borderRadius: '12px', 
-                    boxShadow: 'var(--shadow-medium)',
-                    border: 'none',
-                    color: 'white'
-                  }}
-                >
-                  <Statistic
-                    title={<span style={{ color: 'white' }}>Ativos no período</span>}
-                    value={activeRangeVehicles}
-                    prefix={<ClockCircleOutlined style={{ color: 'white' }} />}
-                    valueStyle={{ color: 'white', fontSize: '32px' }}
-                  />
-                  <div style={{ marginTop: '8px', fontSize: '12px', opacity: 0.8 }}>
-                    Atualizaram no intervalo selecionado
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      {statusDistribution.breakdown.map((status) => (
+                        <div
+                          key={status.key}
+                          className={`flex flex-col gap-2 rounded-xl border bg-gradient-to-br p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${status.summaryGradient} ${status.summaryBorder}`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className={`text-xs font-semibold uppercase tracking-wide ${status.summaryText}`}>
+                                {status.label}
+                              </p>
+                              <p className={`text-xl font-bold ${status.summaryValue}`}>{status.count}</p>
                   </div>
-                </Card>
-              </Col>
-            </Row>
+                            <ShadcnBadge
+                              variant="secondary"
+                              className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${status.badgeClass}`}
+                            >
+                              {status.badgeLabel}
+                            </ShadcnBadge>
+                        </div>
+                          <div className="flex items-center justify-between text-[11px] font-medium text-slate-600">
+                            <span>Participação</span>
+                            <span className={status.summaryValue}>{status.percent}%</span>
+                      </div>
+                    </div>
+                      ))}
+                  </div>
+                  
+                    <div className="grid gap-4 xl:grid-cols-[minmax(0,260px)_1fr]">
+                      <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white/75 p-4 shadow-sm">
+                        <div className="flex w-full items-center justify-between text-sm">
+                          <h3 className="text-base font-semibold text-slate-800">Distribuição Visual</h3>
+                          <ShadcnBadge variant="outline" className="rounded-full border-slate-200 px-2 py-0 text-xs text-slate-600">
+                            Total {statusDistribution.total}
+                          </ShadcnBadge>
+                  </div>
+                        <div className="relative flex h-48 w-48 items-center justify-center">
+                          <svg width="200" height="200" viewBox="0 0 200 200" className="h-full w-full -rotate-90">
+                            <circle cx="100" cy="100" r="80" fill="none" stroke="#e2e8f0" strokeWidth="16" />
+                            {statusDistribution.breakdown.map((status) => {
+                              const dashArray = `${Math.max(status.dash, 0).toFixed(2)} ${statusDistribution.circumference.toFixed(2)}`;
+                              const dashOffset = status.dashOffset.toFixed(2);
+                            return (
+                                <circle
+                                  key={status.key}
+                                  cx="100"
+                                  cy="100"
+                                  r="80"
+                                  fill="none"
+                                  stroke={status.color}
+                                  strokeWidth="16"
+                                  strokeDasharray={dashArray}
+                                  strokeDashoffset={dashOffset}
+                                  strokeLinecap="round"
+                                  className="transition-[stroke-dasharray,stroke-dashoffset] duration-700 ease-out"
+                                />
+                              );
+                            })}
+                      </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+                            <span className="text-3xl font-semibold text-slate-900">{statusDistribution.total}</span>
+                            <span className="text-[11px] font-medium text-slate-500">Veículos monitorados</span>
+                        </div>
+                      </div>
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-medium text-slate-600">
+                          {statusDistribution.breakdown.map((status) => (
+                            <span
+                              key={`${status.key}-chip`}
+                              className={`flex items-center gap-1.5 rounded-full border border-slate-200 px-2.5 py-0.5 text-slate-600 ${status.legendAccent}`}
+                            >
+                              <span className={`h-2 w-2 rounded-full ${status.legendDot}`} />
+                              {status.label}: {status.percent}%
+                            </span>
+                          ))}
+                    </div>
+                  </div>
+                  
+                      <div className="grid gap-3">
+                        {statusDistribution.breakdown.map((status) => (
+                          <div
+                            key={`${status.key}-legend`}
+                            className={`group relative overflow-hidden rounded-xl border bg-white/75 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${status.legendBorder}`}
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                <span className={`h-2.5 w-2.5 rounded-full ${status.legendDot}`} />
+                                <div>
+                                  <p className={`text-sm font-semibold ${status.legendText}`}>{status.label}</p>
+                                  <p className={`text-[11px] font-medium ${status.legendMuted}`}>{status.count} veículos</p>
+                    </div>
+                      </div>
+                              <div className="text-right">
+                                <p className="text-base font-semibold text-slate-900">{status.percent}%</p>
+                                <p className="text-[11px] text-slate-500">({status.count})</p>
+                        </div>
+                    </div>
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full ${status.progressClass}`}
+                                style={{ width: `${Math.min(status.precisePercent, 100).toFixed(2)}%` }}
+                              />
+                    </div>
+                    </div>
+                        ))}
+                      </div>
+                        </div>
+                  </CardContent>
+                </ShadcnCard>
+                </Col>
+              </Row>
 
             {/* Métricas de Performance */}
             <Row gutter={[24, 24]} style={{ marginBottom: '32px', display: 'flex', alignItems: 'stretch' }}>
               <Col xs={24} xl={16} style={{ display: 'flex' }}>
+                {!isPriorityLoading('performance') ? (
                 <Card
-                  title="Performance da Frota" 
+                    title={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>Performance da Frota</span>
+                        {isLoadingPartial && (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            fontSize: '12px',
+                            color: '#1890ff'
+                          }}>
+                            <Spin size="small" />
+                            <span>Carregando...</span>
+                          </div>
+                        )}
+                      </div>
+                    }
                   className="dashboard-card theme-card"
                   style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
                 >
@@ -1747,9 +2404,67 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     </Col>
                   </Row>
                 </Card>
+                ) : (
+                  <Card
+                    title="Performance da Frota" 
+                    className="dashboard-card theme-card"
+                    style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
+                  >
+                    {/* Primeira linha - Métricas de Tempo */}
+                    <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
+                      <Col xs={24} sm={12} md={8}>
+                        <div style={{ textAlign: 'center', padding: '16px' }}>
+                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
+                          <StatisticValueSkeleton size="large" />
+                          <Text type="secondary">Tempo com ignição ligada</Text>
+                        </div>
+                      </Col>
+                      <Col xs={24} sm={12} md={8}>
+                        <div style={{ textAlign: 'center', padding: '16px' }}>
+                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
+                          <StatisticValueSkeleton size="large" />
+                          <Text type="secondary">Tempo com ignição desligada</Text>
+                        </div>
+                      </Col>
+                      <Col xs={24} sm={12} md={8}>
+                        <div style={{ textAlign: 'center', padding: '16px' }}>
+                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
+                          <StatisticValueSkeleton size="large" />
+                          <Text type="secondary">Tempo Veículo Ocioso (parado com ignição ligada)</Text>
+                        </div>
+                      </Col>
+                    </Row>
+                    
+                    {/* Segunda linha - Métricas de Distância */}
+                    <Row gutter={[16, 16]}>
+                      <Col xs={24} sm={12} md={8}>
+                        <div style={{ textAlign: 'center', padding: '16px' }}>
+                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>📈</div>
+                          <StatisticValueSkeleton size="large" />
+                          <Text type="secondary">Distância percorrida no período</Text>
+                        </div>
+                      </Col>
+                      <Col xs={24} sm={12} md={8}>
+                        <div style={{ textAlign: 'center', padding: '16px' }}>
+                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⛽</div>
+                          <StatisticValueSkeleton size="large" />
+                          <Text type="secondary">Combustível estimado (L)</Text>
+                        </div>
+                      </Col>
+                      <Col xs={24} sm={12} md={8}>
+                        <div style={{ textAlign: 'center', padding: '16px' }}>
+                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>🚘</div>
+                          <StatisticValueSkeleton size="large" />
+                          <Text type="secondary">Viagens concluídas no período</Text>
+                        </div>
+                      </Col>
+                    </Row>
+                  </Card>
+                )}
               </Col>
               
               <Col xs={24} xl={8} style={{ display: 'flex' }}>
+                {!isPriorityLoading('alerts') ? (
                   <Card 
                     title="Alertas e Notificações" 
                     className="dashboard-card theme-card"
@@ -1774,7 +2489,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                               • Período: {formattedRange}
                             </Text>
                             <Text style={{ fontSize: '11px', display: 'block' }}>
-                              • Dispositivos: {allDevices?.length || 0}
+                              • Dispositivos: {effectiveDevices.length}
                             </Text>
                             <Button 
                               size="small" 
@@ -1783,7 +2498,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                 console.log('🔍 DEBUG - Forçando reload de eventos...');
                                 const loadData = async () => {
                                   try {
-                                    const deviceIds = (allDevices || []).map(d => d.id);
+                                    const deviceIds = activeDeviceIds;
                                     const rangeStartIso = rangeStartDate.toISOString();
                                     const rangeEndIso = rangeEndDate.toISOString();
                                     
@@ -1867,7 +2582,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                             </div>
                           </div>
                         );
-                            })}
+                      })}
                           </div>
                           
                           {/* Controles de paginação */}
@@ -1907,105 +2622,94 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                       )}
                     </div>
                   </Card>
+                ) : (
+                  <CardLoadingSkeleton 
+                    title="Alertas e Notificações" 
+                    type="events" 
+                    height="100%"
+                  />
+                )}
               </Col>
             </Row>
 
             {/* Cards de Status e Comportamento */}
             <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
-              <Col xs={24} md={8}>
+              <Col xs={24} md={12}>
                   <Card
                   title={
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                      <span style={{ flex: 1 }}>Veículos OFFLINE A MAIS DE 72 HORAS</span>
-                      <Badge 
-                        count={offlineDevices72h.length} 
-                        style={{ 
-                          backgroundColor: '#ff4d4f',
-                          marginLeft: '8px',
-                          flexShrink: 0
-                        }} 
-                      />
+                      <span style={{ flex: 1 }}>Veículos offline a mais de 72 horas</span>
+                      {isPriorityLoading('top-cards') ? (
+                        <BadgeValueSkeleton />
+                      ) : (
+                        <Badge 
+                          count={offlineDevices72h.length} 
+                          style={{ 
+                            backgroundColor: '#ff4d4f',
+                            marginLeft: '8px',
+                            flexShrink: 0
+                          }} 
+                        />
+                      )}
                     </div>
                   }
                     className="dashboard-card theme-card"
                     style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
                     styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
                   >
+                    {/* Filtro de ordenação */}
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      marginBottom: '12px',
+                      padding: '8px 12px',
+                      background: 'rgba(0,0,0,0.02)',
+                      borderRadius: '6px'
+                    }}>
+                      <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500' }}>
+                        Ordenar por:
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button
+                          size="small"
+                          type={offline72hSortOrder === 'oldest' ? 'primary' : 'default'}
+                          onClick={() => setOffline72hSortOrder('oldest')}
+                          style={{ fontSize: '11px' }}
+                        >
+                          Mais antigo
+                        </Button>
+                        <Button
+                          size="small"
+                          type={offline72hSortOrder === 'newest' ? 'primary' : 'default'}
+                          onClick={() => setOffline72hSortOrder('newest')}
+                          style={{ fontSize: '11px' }}
+                        >
+                          Mais recente
+                        </Button>
+                      </div>
+                    </div>
+                    
                     <div 
                       className="custom-scroll-container"
                       style={{ 
                         flex: 1, 
                         overflowY: 'auto', 
                         overflowX: 'hidden',
-                        maxHeight: '300px',
+                        maxHeight: '260px',
                         paddingRight: '4px',
                         scrollbarWidth: 'thin',
                         scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
                       }}>
-                      <List
-                        dataSource={offlineDevices72h}
-                        locale={{ emptyText: 'Nenhum veículo offline há mais de 72h' }}
-                        renderItem={({ device, lastUpdate }) => (
-                          <List.Item style={{ padding: '8px 0' }}>
-                            <List.Item.Meta
-                              title={
-                                <Space size={8}>
-                                <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
-                                  <span>{device.name}</span>
-                                </Space>
-                              }
-                              description={
-                                <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
-                                Último sinal há {formatRelativeTime(lastUpdate)}
-                                </div>
-                              }
-                            />
-                          </List.Item>
-                        )}
-                      />
-                    </div>
-                  </Card>
-              </Col>
-
-              <Col xs={24} md={8}>
-                <Card
-                  title={
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                      <span style={{ flex: 1 }}>Veículos com Alimentação Cortada</span>
-                      <Badge 
-                        count={powerCutDevices.length} 
-                        style={{ 
-                          backgroundColor: '#ff4d4f',
-                          marginLeft: '8px',
-                          flexShrink: 0
-                        }} 
-                      />
-                    </div>
-                  }
-                  className="dashboard-card theme-card"
-                  style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
-                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
-                >
-                  <div 
-                    className="custom-scroll-container"
-                    style={{ 
-                      flex: 1, 
-                      overflowY: 'auto', 
-                      overflowX: 'hidden',
-                      maxHeight: '300px',
-                      paddingRight: '4px',
-                      scrollbarWidth: 'thin',
-                      scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
-                    }}>
                     <List
-                      dataSource={powerCutDevices}
-                      locale={{ emptyText: 'Nenhum veículo com alimentação cortada' }}
-                      renderItem={({ device, lastUpdate }) => (
+                    dataSource={offlineDevices72h}
+                    locale={{ emptyText: 'Nenhum veículo offline há mais de 72h' }}
+                    renderItem={({ device, lastUpdate }) => (
                         <List.Item style={{ padding: '8px 0' }}>
                           <List.Item.Meta
                             title={
                               <Space size={8}>
-                                <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
+                              <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
                                 <span>{device.name}</span>
                               </Space>
                             }
@@ -2018,6 +2722,98 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         </List.Item>
                       )}
                     />
+                    </div>
+                  </Card>
+              </Col>
+
+              <Col xs={24} md={12}>
+                <Card
+                  title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <span style={{ flex: 1 }}>Veículos com Alimentação Cortada</span>
+                      {isPriorityLoading('top-cards') ? (
+                        <BadgeValueSkeleton />
+                      ) : (
+                        <Badge 
+                          count={powerCutDevices.length} 
+                          style={{ 
+                            backgroundColor: '#ff4d4f',
+                            marginLeft: '8px',
+                            flexShrink: 0
+                          }} 
+                        />
+                      )}
+                    </div>
+                  }
+                  className="dashboard-card theme-card"
+                  style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
+                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
+                >
+                  {/* Filtro de ordenação */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginBottom: '12px',
+                    padding: '8px 12px',
+                    background: 'rgba(0,0,0,0.02)',
+                    borderRadius: '6px'
+                  }}>
+                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: '500' }}>
+                      Ordenar por:
+                    </span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <Button
+                        size="small"
+                        type={powerCutSortOrder === 'oldest' ? 'primary' : 'default'}
+                        onClick={() => setPowerCutSortOrder('oldest')}
+                        style={{ fontSize: '11px' }}
+                      >
+                        Mais antigo
+                      </Button>
+                      <Button
+                        size="small"
+                        type={powerCutSortOrder === 'newest' ? 'primary' : 'default'}
+                        onClick={() => setPowerCutSortOrder('newest')}
+                        style={{ fontSize: '11px' }}
+                      >
+                        Mais recente
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className="custom-scroll-container"
+                    style={{ 
+                      flex: 1, 
+                      overflowY: 'auto', 
+                      overflowX: 'hidden',
+                      maxHeight: '260px',
+                      paddingRight: '4px',
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
+                    }}>
+                  <List
+                    dataSource={powerCutDevices}
+                    locale={{ emptyText: 'Nenhum veículo com alimentação cortada' }}
+                    renderItem={({ device, lastUpdate }) => (
+                      <List.Item style={{ padding: '8px 0' }}>
+                        <List.Item.Meta
+                          title={
+                            <Space size={8}>
+                              <Tag color="red" style={{ marginRight: 0 }}>Offline</Tag>
+                              <span>{device.name}</span>
+                </Space>
+                          }
+                          description={
+                            <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
+                                Último sinal há {formatRelativeTime(lastUpdate)}
+                            </div>
+                          }
+                        />
+                      </List.Item>
+                    )}
+                  />
                   </div>
                 </Card>
               </Col>
@@ -2039,35 +2835,82 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column' } }}
                 >
                   <Text type="secondary" style={{ display: 'block', marginBottom: '12px' }}>
-                    Próximas manutenções registradas nos dispositivos.
+                    Módulo de manutenções será implementado em breve.
                   </Text>
                   <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
                     <Col xs={12} md={8}>
-                      <Statistic title="Total" value={maintenances.length} />
+                      <div style={{ position: 'relative' }}>
+                        <Statistic title="Total" value={upcomingMaintenances.length} />
+                        {isPriorityLoading('performance') && (
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '50%', 
+                            left: '50%', 
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1
+                          }}>
+                            <StatisticValueSkeleton />
+                          </div>
+                        )}
+                      </div>
                     </Col>
                     <Col xs={12} md={8}>
-                      <Statistic title="Pendentes" value={upcomingMaintenances.length} valueStyle={{ color: '#faad14' }} />
+                      <div style={{ position: 'relative' }}>
+                        <Statistic 
+                          title="Pendentes" 
+                          value={upcomingMaintenances.length} 
+                          valueStyle={{ color: '#faad14' }} 
+                        />
+                        {isPriorityLoading('performance') && (
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '50%', 
+                            left: '50%', 
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1
+                          }}>
+                            <StatisticValueSkeleton />
+                          </div>
+                        )}
+                      </div>
                     </Col>
                     <Col xs={12} md={8}>
-                      <Statistic title="Concluídas" value={maintenances.length - upcomingMaintenances.length} valueStyle={{ color: '#52c41a' }} />
+                      <div style={{ position: 'relative' }}>
+                        <Statistic 
+                          title="Concluídas" 
+                          value={0} 
+                          valueStyle={{ color: '#52c41a' }} 
+                        />
+                        {isPriorityLoading('performance') && (
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '50%', 
+                            left: '50%', 
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1
+                          }}>
+                            <StatisticValueSkeleton />
+                          </div>
+                        )}
+                      </div>
                     </Col>
                   </Row>
                   <div style={{ flex: 1, overflow: 'auto' }}>
-                    <List
-                      size="small"
-                      dataSource={upcomingMaintenances}
-                      locale={{ emptyText: 'Nenhuma manutenção cadastrada' }}
-                      renderItem={(maintenance) => (
-                        <List.Item style={{ padding: '8px 0' }}>
-                          <div style={{ width: '100%' }}>
-                            <Text strong>{maintenance.name || 'Manutenção'}</Text>
-                            <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
-                              Dispositivo #{maintenance.deviceId} • Intervalo: {maintenance.period ?? '—'} {maintenance.type}
-                            </div>
+                  <List
+                    size="small"
+                    dataSource={upcomingMaintenances}
+                      locale={{ emptyText: 'Módulo de manutenções em desenvolvimento' }}
+                    renderItem={(maintenance) => (
+                      <List.Item style={{ padding: '8px 0' }}>
+                        <div style={{ width: '100%' }}>
+                          <Text strong>{maintenance.name || 'Manutenção'}</Text>
+                          <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666' }}>
+                            Dispositivo #{maintenance.deviceId} • Intervalo: {maintenance.period ?? '—'} {maintenance.type}
                           </div>
-                        </List.Item>
-                      )}
-                    />
+                        </div>
+                      </List.Item>
+                    )}
+                  />
                   </div>
                 </Card>
                     </Col>
@@ -2084,37 +2927,84 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   </Text>
                   <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
                     <Col xs={12} md={8}>
+                      <div style={{ position: 'relative' }}>
                       <Statistic title="Motoristas" value={driverMetrics.total} />
+                        {isPriorityLoading('alerts') && (
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '50%', 
+                            left: '50%', 
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1
+                          }}>
+                            <StatisticValueSkeleton />
+                          </div>
+                        )}
+                      </div>
                     </Col>
                     <Col xs={12} md={8}>
-                      <Statistic title="CNHs vencidas" value={driverMetrics.expired} valueStyle={{ color: '#ff4d4f' }} />
+                      <div style={{ position: 'relative' }}>
+                        <Statistic 
+                          title="CNHs vencidas" 
+                          value={driverMetrics.expired} 
+                          valueStyle={{ color: '#ff4d4f' }} 
+                        />
+                        {isPriorityLoading('alerts') && (
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '50%', 
+                            left: '50%', 
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1
+                          }}>
+                            <StatisticValueSkeleton />
+                          </div>
+                        )}
+                      </div>
                     </Col>
                     <Col xs={12} md={8}>
-                      <Statistic title="Vencendo 30 dias" value={driverMetrics.expiringSoon} valueStyle={{ color: '#faad14' }} />
+                      <div style={{ position: 'relative' }}>
+                        <Statistic 
+                          title="Vencendo 30 dias" 
+                          value={driverMetrics.expiringSoon} 
+                          valueStyle={{ color: '#faad14' }} 
+                        />
+                        {isPriorityLoading('alerts') && (
+                          <div style={{ 
+                            position: 'absolute', 
+                            top: '50%', 
+                            left: '50%', 
+                            transform: 'translate(-50%, -50%)',
+                            zIndex: 1
+                          }}>
+                            <StatisticValueSkeleton />
+                          </div>
+                        )}
+                      </div>
                     </Col>
                   </Row>
                   <div style={{ flex: 1, overflow: 'auto' }}>
-                    <List
-                      size="small"
-                      dataSource={displayDrivers}
-                      locale={{ emptyText: driverListEmptyText }}
-                      renderItem={(driver) => (
-                        <List.Item style={{ padding: '8px 0' }}>
-                          <div style={{ width: '100%' }}>
-                          <Space direction="vertical" size={2} style={{ width: '100%' }}>
-                            <Space size={8}>
-                                <Avatar size="small" icon={<UserOutlined />} />
-                                <Text strong>{driver.name}</Text>
-                                {driver.licenseCategory && <Tag color="blue">CNH {driver.licenseCategory}</Tag>}
-                            </Space>
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                                Validade: {driver.licenseExpiry ? new Date(driver.licenseExpiry).toLocaleDateString() : '—'}
-                            </Text>
+                  <List
+                    size="small"
+                    dataSource={displayDrivers}
+                    locale={{ emptyText: driverListEmptyText }}
+                    renderItem={(driver) => (
+                      <List.Item style={{ padding: '8px 0' }}>
+                        <div style={{ width: '100%' }}>
+                        <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                          <Space size={8}>
+                              <Avatar size="small" icon={<UserOutlined />} />
+                              <Text strong>{driver.name}</Text>
+                              {driver.licenseCategory && <Tag color="blue">CNH {driver.licenseCategory}</Tag>}
                           </Space>
-                          </div>
-                        </List.Item>
-                      )}
-                    />
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
+                              Validade: {driver.licenseExpiry ? new Date(driver.licenseExpiry).toLocaleDateString() : '—'}
+                          </Text>
+                        </Space>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
                   </div>
                 </Card>
               </Col>
@@ -2168,7 +3058,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
                   <Row gutter={[24, 24]}>
                     {/* Gráfico de Barras Moderno - Consumo por Veículo */}
-                    <Col xs={24} lg={16}>
+                    <Col xs={24}>
                       <div style={{ 
                         background: 'rgba(255,255,255,0.6)', 
                         borderRadius: '16px', 
@@ -2176,31 +3066,153 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         border: '1px solid rgba(0,0,0,0.05)',
                         boxShadow: '0 4px 16px rgba(0,0,0,0.04)'
                       }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ fontSize: '18px' }}>📊</div>
-                          <Text strong style={{ fontSize: '16px', color: '#1a1a2e' }}>Consumo por Veículo</Text>
-                          <Tag color="blue" style={{ marginLeft: 'auto' }}>L/100km</Tag>
+                          <Text strong style={{ fontSize: '16px', color: '#1a1a2e' }}>Eficiência por Veículo</Text>
+                            <Tag color="green">km/l</Tag>
                         </div>
+                          <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500 }}>
+                            Período: {formattedRange}
+                          </div>
+                        </div>
+                        
+                        {/* Campo de busca para veículos */}
+                        <div style={{ marginBottom: '16px' }}>
+                          <Input
+                            placeholder="Buscar veículo específico..."
+                            prefix={<SearchOutlined />}
+                            value={vehicleEfficiencySearch}
+                            onChange={(e) => setVehicleEfficiencySearch(e.target.value)}
+                            style={{ 
+                              borderRadius: '8px',
+                              border: '1px solid #d1d5db',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                            }}
+                            allowClear
+                          />
+                        </div>
+                        {/* Contador de veículos */}
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          marginBottom: '12px',
+                          padding: '8px 12px',
+                          background: 'rgba(0,0,0,0.02)',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#6b7280'
+                        }}>
+                          <span>
+                            {(() => {
+                              const allDevices = Array.from(deviceFuelEfficiency.values());
+                              const filteredDevices = vehicleEfficiencySearch 
+                                ? allDevices.filter(item => 
+                                    item.device.name.toLowerCase().includes(vehicleEfficiencySearch.toLowerCase()) ||
+                                    item.device.uniqueId.toLowerCase().includes(vehicleEfficiencySearch.toLowerCase())
+                                  )
+                                : allDevices;
+                              return `${filteredDevices.length} veículo${filteredDevices.length !== 1 ? 's' : ''} ${vehicleEfficiencySearch ? 'encontrado' + (filteredDevices.length !== 1 ? 's' : '') : 'disponível' + (filteredDevices.length !== 1 ? 's' : '')}`;
+                            })()}
+                          </span>
+                          {vehicleEfficiencySearch && (
+                            <Button 
+                              type="link" 
+                              size="small" 
+                              onClick={() => setVehicleEfficiencySearch('')}
+                              style={{ padding: 0, fontSize: '12px' }}
+                            >
+                              Limpar busca
+                            </Button>
+                          )}
+                        </div>
+                        
                         <div style={{ height: '320px', overflowY: 'auto', paddingRight: '8px' }}>
-                          {allDevices?.slice(0, totalDevices).map((device, index) => {
-                            const baseConsumption = 8 + (index % 4);
-                            const efficiency = Math.random() > 0.3 ? baseConsumption : baseConsumption + 2;
-                            const maxConsumption = 15;
-                            const percentage = (efficiency / maxConsumption) * 100;
+                          {(() => {
+                            // Buscar todos os veículos, não apenas os com eficiência
+                            const allDevices = Array.from(deviceFuelEfficiency.values());
+                            
+                            // Aplicar filtro de busca se houver termo
+                            const filteredDevices = vehicleEfficiencySearch 
+                              ? allDevices.filter(item => 
+                                  item.device.name.toLowerCase().includes(vehicleEfficiencySearch.toLowerCase()) ||
+                                  item.device.uniqueId.toLowerCase().includes(vehicleEfficiencySearch.toLowerCase())
+                                )
+                              : allDevices;
+                            
+                            // Ordenar por eficiência (maior primeiro) ou por nome se não houver eficiência
+                            const devicesWithEfficiency = filteredDevices
+                              .sort((a, b) => {
+                                const efficiencyDiff = (b.efficiency || 0) - (a.efficiency || 0);
+                                if (efficiencyDiff !== 0) {
+                                  return efficiencyDiff;
+                                }
+                                return a.device.name.localeCompare(b.device.name);
+                              });
+                            
+                            console.log('🔍 DEBUG - devicesWithEfficiency length:', devicesWithEfficiency.length);
+                            
+                            if (devicesWithEfficiency.length === 0) {
+                              return (
+                                <div style={{ 
+                                  textAlign: 'center', 
+                                  padding: '40px 20px',
+                                  color: '#666'
+                                }}>
+                                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+                                  <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '8px' }}>
+                                    {vehicleEfficiencySearch 
+                                      ? 'Nenhum veículo encontrado' 
+                                      : 'Nenhum veículo disponível'
+                                    }
+                                  </div>
+                                  <div style={{ fontSize: '14px', opacity: 0.8 }}>
+                                    {vehicleEfficiencySearch 
+                                      ? 'Tente buscar por outro termo' 
+                                      : 'Aguarde o carregamento dos dados'
+                                    }
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
+                            return devicesWithEfficiency.map((item) => {
+                              const efficiencyValue = item.efficiency > 0 ? item.efficiency : 0;
+                              const efficiencyLabel = efficiencyValue > 0 ? efficiencyValue.toFixed(1) : '—';
+                            const maxEfficiency = 20; // 20 km/l como referência máxima
+                              const percentage = efficiencyValue > 0 ? Math.min((efficiencyValue / maxEfficiency) * 100, 100) : 0;
                             
                             const getEfficiencyColor = (eff: number) => {
-                              if (eff <= 10) return { bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)', color: '#52c41a' };
-                              if (eff <= 12) return { bg: 'linear-gradient(135deg, #faad14 0%, #ffc53d 100%)', color: '#faad14' };
+                              if (eff >= 12) return { bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)', color: '#52c41a' };
+                              if (eff >= 8) return { bg: 'linear-gradient(135deg, #faad14 0%, #ffc53d 100%)', color: '#faad14' };
                               return { bg: 'linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)', color: '#ff4d4f' };
                             };
                             
-                            const colors = getEfficiencyColor(efficiency);
+                              const colors = getEfficiencyColor(efficiencyValue);
+                              const effectiveFuelPrice = getEffectiveFuelPrice(item.device.id);
+                              const isOverrideActive = Object.prototype.hasOwnProperty.call(fuelPriceOverrides, item.device.id);
+                              const fuelUsedLiters = item.fuelUsed > 0 ? item.fuelUsed : 0;
+                              const fuelUsedLabel = fuelUsedLiters > 0
+                                ? fuelUsedLiters.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : '—';
+                              const estimatedCost = fuelUsedLiters > 0 ? fuelUsedLiters * effectiveFuelPrice : 0;
+                              const costLabel = fuelUsedLiters > 0
+                                ? estimatedCost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                : '—';
+                              const priceLabel = effectiveFuelPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                              const distanceLabel = item.distance > 0
+                                ? item.distance.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+                                : '0,0';
+                              const isRealData = item.fuelSource === 'real' || item.hasRealData;
                             
                             return (
-                              <div key={device.id} style={{ 
+                                <div
+                                  key={item.device.id}
+                                  style={{
                                 marginBottom: '20px',
                                 padding: '16px',
-                                background: 'rgba(255,255,255,0.8)',
+                                    background: 'rgba(255,255,255,0.85)',
                                 borderRadius: '12px',
                                 border: '1px solid rgba(0,0,0,0.05)',
                                 transition: 'all 0.3s ease',
@@ -2213,10 +3225,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = 'translateY(0)';
                                 e.currentTarget.style.boxShadow = 'none';
-                              }}>
+                                  }}
+                                >
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div style={{
+                                      <div
+                                        style={{
                                       width: '32px',
                                       height: '32px',
                                       borderRadius: '8px',
@@ -2227,21 +3241,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                       fontSize: '14px',
                                       color: 'white',
                                       fontWeight: 'bold'
-                                    }}>
-                                      {efficiency.toFixed(1)}
+                                        }}
+                                      >
+                                        {efficiencyLabel}
                                     </div>
-                                    <Text style={{ fontSize: '14px', fontWeight: '600', color: '#1a1a2e' }}>{device.name}</Text>
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div>
+                                      <Text style={{ fontSize: '14px', fontWeight: '600', color: '#1a1a2e' }}>{item.device.name}</Text>
+                                      </div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                                     <Text style={{ fontSize: '13px', fontWeight: 'bold', color: colors.color }}>
-                                      {efficiency.toFixed(1)} L/100km
+                                        {efficiencyLabel} km/l
                                     </Text>
-                                    <div style={{
-                                      width: '8px',
-                                      height: '8px',
-                                      borderRadius: '50%',
-                                      backgroundColor: colors.color
-                                    }}></div>
+                                      <Text style={{ fontSize: '11px', color: '#666' }}>
+                                        {distanceLabel} km
+                                      </Text>
                                   </div>
                                 </div>
                                 <div style={{ 
@@ -2272,587 +3286,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                     }}></div>
                                   </div>
                                 </div>
+                                  <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#555' }}>
+                                      <span>
+                                        Consumo {isRealData ? 'real' : 'estimado'}
+                                      </span>
+                                      <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+                                        {fuelUsedLabel} L
+                                      </span>
                               </div>
-                            );
-                          })}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#555' }}>
+                                      <span>Custo estimado</span>
+                                      <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
+                                        {costLabel}
+                                      </span>
                         </div>
-                      </div>
-                    </Col>
-
-                    {/* Métricas Modernas */}
-                    <Col xs={24} lg={8}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        {/* Consumo Médio da Frota - Card Moderno */}
-                        <div style={{ 
-                          textAlign: 'center', 
-                          padding: '24px', 
-                          background: 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
-                          borderRadius: '16px', 
-                          color: 'white',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          boxShadow: '0 8px 32px rgba(96, 165, 250, 0.3)'
-                        }}>
-                          <div style={{
-                            position: 'absolute',
-                            top: '-50%',
-                            right: '-50%',
-                            width: '100%',
-                            height: '100%',
-                            background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
-                            borderRadius: '50%'
-                          }}></div>
-                          <div style={{ position: 'relative', zIndex: 1 }}>
-                            <div style={{ fontSize: '36px', fontWeight: 'bold', marginBottom: '8px', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                              9.8
-                            </div>
-                            <div style={{ fontSize: '16px', opacity: 0.9, marginBottom: '4px' }}>
-                              L/100km
-                            </div>
-                            <div style={{ fontSize: '13px', opacity: 0.8 }}>
-                              Consumo Médio da Frota
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Eficiência por Categoria - Cards Modernos */}
-                        <div style={{
-                          background: 'rgba(255,255,255,0.6)',
-                          borderRadius: '16px',
-                          padding: '20px',
-                          border: '1px solid rgba(0,0,0,0.05)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                            <div style={{ fontSize: '16px' }}>🎯</div>
-                            <Text strong style={{ fontSize: '14px', color: '#1a1a2e' }}>Eficiência por Categoria</Text>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {(() => {
-                              // Calcular distribuição real baseada nos veículos
-                              const excellent = Math.floor(totalDevices * 0.4); // 40% excelente
-                              const good = Math.floor(totalDevices * 0.5); // 50% boa
-                              const attention = totalDevices - excellent - good; // resto atenção
-                              
-                              return [
-                                { label: 'Excelente', range: '≤10 L/100km', count: excellent, color: '#52c41a', bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)' },
-                                { label: 'Boa', range: '10-12 L/100km', count: good, color: '#faad14', bg: 'linear-gradient(135deg, #faad14 0%, #ffc53d 100%)' },
-                                { label: 'Atenção', range: '>12 L/100km', count: attention, color: '#ff4d4f', bg: 'linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)' }
-                              ];
-                            })().map((item, index) => (
-                              <div key={index} style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '12px',
-                                background: 'rgba(255,255,255,0.8)',
-                                borderRadius: '10px',
-                                border: '1px solid rgba(0,0,0,0.05)',
-                                transition: 'all 0.3s ease'
-                              }}>
-                                <div style={{
-                                  width: '12px',
-                                  height: '12px',
-                                  borderRadius: '50%',
-                                  background: item.bg,
-                                  boxShadow: `0 2px 8px ${item.color}40`
-                                }}></div>
-                                <div style={{ flex: 1 }}>
-                                  <Text style={{ fontSize: '13px', fontWeight: '500', color: '#1a1a2e' }}>{item.label}</Text>
-                                  <div style={{ fontSize: '11px', color: '#666' }}>{item.range}</div>
-                                </div>
-                                <div style={{
-                                  padding: '4px 8px',
-                                  background: item.bg,
-                                  borderRadius: '6px',
-                                  color: 'white',
-                                  fontSize: '11px',
-                                  fontWeight: 'bold'
-                                }}>
-                                  {item.count}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Configuração do Preço do Combustível */}
-                        <div style={{
-                          background: 'rgba(255,255,255,0.6)',
-                          borderRadius: '16px',
-                          padding: '16px',
-                          border: '1px solid rgba(0,0,0,0.05)',
-                          marginBottom: '16px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                            <div style={{ fontSize: '16px' }}>⛽</div>
-                            <Text strong style={{ fontSize: '14px', color: '#1a1a2e' }}>Preço do Combustível</Text>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Text style={{ fontSize: '12px', color: '#666' }}>R$</Text>
-                            <Input
-                              type="number"
-                              value={fuelPrice}
-                              onChange={(e) => setFuelPrice(parseFloat(e.target.value) || 0)}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#555', flexWrap: 'wrap' }}>
+                                      <span>Valor combustível:</span>
+                                      <InputNumber
+                                        size="small"
                               min={0}
                               step={0.01}
-                              style={{ 
-                                width: '80px',
-                                textAlign: 'center',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
-                              }}
-                              placeholder="5.50"
-                            />
-                            <Text style={{ fontSize: '12px', color: '#666' }}>/L</Text>
+                                        precision={2}
+                                        value={isOverrideActive ? fuelPriceOverrides[item.device.id] : effectiveFuelPrice}
+                                        onChange={(value) => handleFuelPriceOverrideChange(item.device.id, value)}
+                                        style={{ width: '120px' }}
+                                      />
+                                      <Text style={{ fontSize: '11px', color: '#666' }}>
+                                        R$ {priceLabel}
+                                      </Text>
+                                      {isOverrideActive && (
+                                        <Button
+                                          type="link"
+                                          size="small"
+                                          onClick={() => handleFuelPriceOverrideChange(item.device.id, null)}
+                                          style={{ padding: 0 }}
+                                        >
+                                          Usar padrão
+                                        </Button>
+                                      )}
                           </div>
-                          <div style={{ fontSize: '11px', color: '#999', marginTop: '4px', textAlign: 'center' }}>
-                            Preço médio por litro
-                          </div>
-                        </div>
-
-                        {/* Economia Estimada - Card Moderno */}
-                        <div style={{ 
-                          textAlign: 'center', 
-                          padding: '20px', 
-                          background: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)',
-                          borderRadius: '16px',
-                          color: 'white',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          boxShadow: '0 8px 32px rgba(82, 196, 26, 0.3)'
-                        }}>
-                          <div style={{
-                            position: 'absolute',
-                            top: '-30%',
-                            left: '-30%',
-                            width: '60%',
-                            height: '60%',
-                            background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
-                            borderRadius: '50%'
-                          }}></div>
-                          <div style={{ position: 'relative', zIndex: 1 }}>
-                            <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '6px', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                              R$ {Math.round((totalDistanceKm * 0.12 * fuelPrice)).toLocaleString('pt-BR')}
-                            </div>
-                            <div style={{ fontSize: '13px', opacity: 0.9, marginBottom: '2px' }}>
-                              Economia estimada no mês
-                            </div>
-                            <div style={{ fontSize: '11px', opacity: 0.8 }}>
-                              Baseado em 12% de economia
-                            </div>
-                            <div style={{ fontSize: '10px', opacity: 0.7, marginTop: '2px' }}>
-                              {totalDistanceKm.toFixed(0)}km × 12% × R$ {fuelPrice.toFixed(2)}/L
-                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Col>
-                  </Row>
-
-                  {/* Gráfico de Pizza Moderno */}
-                  <div style={{ 
-                    marginTop: '32px',
-                    background: 'rgba(255,255,255,0.6)',
-                    borderRadius: '16px',
-                    padding: '24px',
-                    border: '1px solid rgba(0,0,0,0.05)'
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                      <div style={{ fontSize: '18px' }}>🥧</div>
-                      <Text strong style={{ fontSize: '16px', color: '#1a1a2e' }}>Distribuição de Eficiência</Text>
-                    </div>
-                    <Row gutter={[24, 24]}>
-                      <Col xs={24} md={12}>
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '220px' }}>
-                          <div style={{ position: 'relative', width: '180px', height: '180px' }}>
-                            {/* Gráfico de Pizza SVG Moderno */}
-                            <svg width="180" height="180" style={{ transform: 'rotate(-90deg)', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))' }}>
-                              <circle
-                                cx="90"
-                                cy="90"
-                                r="70"
-                                fill="none"
-                                stroke="rgba(0,0,0,0.05)"
-                                strokeWidth="24"
-                              />
-                              {(() => {
-                                const excellent = Math.floor(totalDevices * 0.4);
-                                const good = Math.floor(totalDevices * 0.5);
-                                const attention = totalDevices - excellent - good;
-                                
-                                const circumference = 2 * Math.PI * 70; // r=70
-                                const excellentArc = (excellent / totalDevices) * circumference;
-                                const goodArc = (good / totalDevices) * circumference;
-                                const attentionArc = (attention / totalDevices) * circumference;
-                                
-                                return (
-                                  <>
-                                    {/* Excelente - Verde */}
-                                    <circle
-                                      cx="90"
-                                      cy="90"
-                                      r="70"
-                                      fill="none"
-                                      stroke="url(#excellentGradient)"
-                                      strokeWidth="24"
-                                      strokeDasharray={`${excellentArc} ${circumference}`}
-                                      strokeDashoffset="0"
-                                      strokeLinecap="round"
-                                    />
-                                    {/* Boa - Amarelo */}
-                                    <circle
-                                      cx="90"
-                                      cy="90"
-                                      r="70"
-                                      fill="none"
-                                      stroke="url(#goodGradient)"
-                                      strokeWidth="24"
-                                      strokeDasharray={`${goodArc} ${circumference}`}
-                                      strokeDashoffset={`-${excellentArc}`}
-                                      strokeLinecap="round"
-                                    />
-                                    {/* Atenção - Vermelho */}
-                                    <circle
-                                      cx="90"
-                                      cy="90"
-                                      r="70"
-                                      fill="none"
-                                      stroke="url(#attentionGradient)"
-                                      strokeWidth="24"
-                                      strokeDasharray={`${attentionArc} ${circumference}`}
-                                      strokeDashoffset={`-${excellentArc + goodArc}`}
-                                      strokeLinecap="round"
-                                    />
-                                  </>
-                                );
+                              );
+                            });
                               })()}
-                              
-                              {/* Gradientes */}
-                              <defs>
-                                <linearGradient id="excellentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                  <stop offset="0%" stopColor="#52c41a" />
-                                  <stop offset="100%" stopColor="#73d13d" />
-                                </linearGradient>
-                                <linearGradient id="goodGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                  <stop offset="0%" stopColor="#faad14" />
-                                  <stop offset="100%" stopColor="#ffc53d" />
-                                </linearGradient>
-                                <linearGradient id="attentionGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                  <stop offset="0%" stopColor="#ff4d4f" />
-                                  <stop offset="100%" stopColor="#ff7875" />
-                                </linearGradient>
-                                <linearGradient id="restGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                  <stop offset="0%" stopColor="#d9d9d9" />
-                                  <stop offset="100%" stopColor="#f0f0f0" />
-                                </linearGradient>
-                              </defs>
-                            </svg>
-                            {/* Texto central moderno */}
-                            <div style={{ 
-                              position: 'absolute', 
-                              top: '50%', 
-                              left: '50%', 
-                              transform: 'translate(-50%, -50%)',
-                              textAlign: 'center',
-                              background: 'rgba(255,255,255,0.9)',
-                              borderRadius: '50%',
-                              width: '80px',
-                              height: '80px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              boxShadow: '0 4px 16px rgba(0,0,0,0.1)'
-                            }}>
-                              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1a1a2e' }}>
-                                {totalDevices}
                               </div>
-                              <div style={{ fontSize: '10px', color: '#666' }}>Veículos</div>
-                            </div>
-                          </div>
-                        </div>
-                      </Col>
-                      <Col xs={24} md={12}>
-                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '220px', gap: '16px' }}>
-                          {(() => {
-                            // Calcular distribuição real baseada nos veículos
-                            const excellent = Math.floor(totalDevices * 0.4);
-                            const good = Math.floor(totalDevices * 0.5);
-                            const attention = totalDevices - excellent - good;
-                            
-                            return [
-                              { 
-                                label: 'Excelente', 
-                                count: `${excellent} veículo${excellent !== 1 ? 's' : ''}`, 
-                                percent: `${((excellent / totalDevices) * 100).toFixed(1)}%`, 
-                                color: '#52c41a', 
-                                bg: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)' 
-                              },
-                              { 
-                                label: 'Boa', 
-                                count: `${good} veículo${good !== 1 ? 's' : ''}`, 
-                                percent: `${((good / totalDevices) * 100).toFixed(1)}%`, 
-                                color: '#faad14', 
-                                bg: 'linear-gradient(135deg, #faad14 0%, #ffc53d 100%)' 
-                              },
-                              { 
-                                label: 'Atenção', 
-                                count: `${attention} veículo${attention !== 1 ? 's' : ''}`, 
-                                percent: `${((attention / totalDevices) * 100).toFixed(1)}%`, 
-                                color: '#ff4d4f', 
-                                bg: 'linear-gradient(135deg, #ff4d4f 0%, #ff7875 100%)' 
-                              }
-                            ];
-                          })().map((item, index) => (
-                            <div key={index} style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '16px',
-                              padding: '16px',
-                              background: 'rgba(255,255,255,0.8)',
-                              borderRadius: '12px',
-                              border: '1px solid rgba(0,0,0,0.05)',
-                              transition: 'all 0.3s ease',
-                              cursor: 'pointer'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.transform = 'translateX(4px)';
-                              e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.1)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = 'translateX(0)';
-                              e.currentTarget.style.boxShadow = 'none';
-                            }}>
-                              <div style={{
-                                width: '20px',
-                                height: '20px',
-                                borderRadius: '50%',
-                                background: item.bg,
-                                boxShadow: `0 2px 8px ${item.color}40`
-                              }}></div>
-                              <div style={{ flex: 1 }}>
-                                <Text style={{ fontSize: '15px', fontWeight: '600', color: '#1a1a2e' }}>{item.label}</Text>
-                                <div style={{ fontSize: '12px', color: '#666' }}>{item.count} • {item.percent}</div>
-                              </div>
-                              <div style={{
-                                padding: '6px 12px',
-                                background: item.bg,
-                                borderRadius: '8px',
-                                color: 'white',
-                                fontSize: '12px',
-                                fontWeight: 'bold',
-                                boxShadow: `0 2px 8px ${item.color}40`
-                              }}>
-                                {item.percent}
-                              </div>
-                            </div>
-                          ))}
                         </div>
                       </Col>
                     </Row>
-                  </div>
                 </Card>
               </Col>
             </Row>
               
-            {/* Análise Detalhada */}
-            <Row gutter={[24, 24]}>
-              <Col xs={24} xl={12}>
-                <Card 
-                  title="Distribuição por Status" 
-                  className="dashboard-card theme-card"
-                  style={cardRaisedStyle}
-                >
-                  <Row gutter={[16, 16]}>
-                    <Col xs={24} sm={12}>
-                      <Statistic title="Online" value={onlineVehicles} suffix={<Tag color="green">OK</Tag>} />
-                    </Col>
-                    <Col xs={24} sm={12}>
-                      <Statistic title="Offline" value={offlineVehicles} suffix={<Tag color="red">Atenção</Tag>} />
-                    </Col>
-                    <Col xs={24} sm={12}>
-                      <Statistic title="Bloqueados" value={blockedVehicles} suffix={<Tag color="volcano">Bloqueado</Tag>} />
-                    </Col>
-                    <Col xs={24} sm={12}>
-                      <Statistic title="Inativos" value={inactiveVehicles} suffix={<Tag color="default">Inativo</Tag>} />
-                    </Col>
-                  </Row>
-
-                  <Divider style={{ margin: '16px 0' }} />
-
-                  {/* Gráfico de Pizza Simples */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <Text strong style={{ display: 'block', marginBottom: '12px' }}>Distribuição por Status</Text>
-                    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
-                      <div style={{ position: 'relative', width: '160px', height: '160px' }}>
-                        {/* Gráfico de Pizza SVG */}
-                        <svg width="160" height="160" style={{ transform: 'rotate(-90deg)' }}>
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            fill="none"
-                            stroke="#f0f0f0"
-                            strokeWidth="20"
-                          />
-                          {/* Online - Verde */}
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            fill="none"
-                            stroke="#52c41a"
-                            strokeWidth="20"
-                            strokeDasharray={`${(onlineVehicles / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377} 377`}
-                            strokeDashoffset="0"
-                          />
-                          {/* Offline - Vermelho */}
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            fill="none"
-                            stroke="#ff4d4f"
-                            strokeWidth="20"
-                            strokeDasharray={`${(offlineVehicles / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377} 377`}
-                            strokeDashoffset={`-${(onlineVehicles / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377}`}
-                          />
-                          {/* Bloqueados - Laranja */}
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            fill="none"
-                            stroke="#fa8c16"
-                            strokeWidth="20"
-                            strokeDasharray={`${(blockedVehicles / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377} 377`}
-                            strokeDashoffset={`-${((onlineVehicles + offlineVehicles) / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377}`}
-                          />
-                          {/* Inativos - Cinza */}
-                          <circle
-                            cx="80"
-                            cy="80"
-                            r="60"
-                            fill="none"
-                            stroke="#d9d9d9"
-                            strokeWidth="20"
-                            strokeDasharray={`${(inactiveVehicles / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377} 377`}
-                            strokeDashoffset={`-${((onlineVehicles + offlineVehicles + blockedVehicles) / (onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles)) * 377}`}
-                          />
-                        </svg>
-                        {/* Texto central */}
-                        <div style={{ 
-                          position: 'absolute', 
-                          top: '50%', 
-                          left: '50%', 
-                          transform: 'translate(-50%, -50%)',
-                          textAlign: 'center'
-                        }}>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a1a2e' }}>
-                            {onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles}
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#666' }}>Total</div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Legenda */}
-                    <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '16px', marginTop: '16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '12px', height: '12px', backgroundColor: '#52c41a', borderRadius: '50%' }}></div>
-                        <Text style={{ fontSize: '12px' }}>Online ({onlineVehicles})</Text>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '12px', height: '12px', backgroundColor: '#ff4d4f', borderRadius: '50%' }}></div>
-                        <Text style={{ fontSize: '12px' }}>Offline ({offlineVehicles})</Text>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '12px', height: '12px', backgroundColor: '#fa8c16', borderRadius: '50%' }}></div>
-                        <Text style={{ fontSize: '12px' }}>Bloqueados ({blockedVehicles})</Text>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '12px', height: '12px', backgroundColor: '#d9d9d9', borderRadius: '50%' }}></div>
-                        <Text style={{ fontSize: '12px' }}>Inativos ({inactiveVehicles})</Text>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Divider style={{ margin: '16px 0' }} />
-
-                  {/* Gráfico de Barras Horizontal */}
-                  <div>
-                    <Text strong style={{ display: 'block', marginBottom: '12px' }}>Comparativo por Status</Text>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {/* Online */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <Text style={{ width: '60px', fontSize: '12px' }}>Online</Text>
-                        <div style={{ flex: 1, height: '20px', backgroundColor: '#f0f0f0', borderRadius: '10px', overflow: 'hidden' }}>
-                          <div 
-                            style={{ 
-                              height: '100%', 
-                              backgroundColor: '#52c41a', 
-                              width: `${(onlineVehicles / Math.max(onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles, 1)) * 100}%`,
-                              transition: 'width 0.3s ease'
-                            }}
-                          ></div>
-                        </div>
-                        <Text style={{ fontSize: '12px', fontWeight: 'bold', minWidth: '30px' }}>{onlineVehicles}</Text>
-                      </div>
-                      
-                      {/* Offline */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <Text style={{ width: '60px', fontSize: '12px' }}>Offline</Text>
-                        <div style={{ flex: 1, height: '20px', backgroundColor: '#f0f0f0', borderRadius: '10px', overflow: 'hidden' }}>
-                          <div 
-                            style={{ 
-                              height: '100%', 
-                              backgroundColor: '#ff4d4f', 
-                              width: `${(offlineVehicles / Math.max(onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles, 1)) * 100}%`,
-                              transition: 'width 0.3s ease'
-                            }}
-                          ></div>
-                        </div>
-                        <Text style={{ fontSize: '12px', fontWeight: 'bold', minWidth: '30px' }}>{offlineVehicles}</Text>
-                      </div>
-                      
-                      {/* Bloqueados */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <Text style={{ width: '60px', fontSize: '12px' }}>Bloqueados</Text>
-                        <div style={{ flex: 1, height: '20px', backgroundColor: '#f0f0f0', borderRadius: '10px', overflow: 'hidden' }}>
-                          <div 
-                            style={{ 
-                              height: '100%', 
-                              backgroundColor: '#fa8c16', 
-                              width: `${(blockedVehicles / Math.max(onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles, 1)) * 100}%`,
-                              transition: 'width 0.3s ease'
-                            }}
-                          ></div>
-                        </div>
-                        <Text style={{ fontSize: '12px', fontWeight: 'bold', minWidth: '30px' }}>{blockedVehicles}</Text>
-                      </div>
-                      
-                      {/* Inativos */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <Text style={{ width: '60px', fontSize: '12px' }}>Inativos</Text>
-                        <div style={{ flex: 1, height: '20px', backgroundColor: '#f0f0f0', borderRadius: '10px', overflow: 'hidden' }}>
-                          <div 
-                            style={{ 
-                              height: '100%', 
-                              backgroundColor: '#d9d9d9', 
-                              width: `${(inactiveVehicles / Math.max(onlineVehicles + offlineVehicles + blockedVehicles + inactiveVehicles, 1)) * 100}%`,
-                              transition: 'width 0.3s ease'
-                            }}
-                          ></div>
-                        </div>
-                        <Text style={{ fontSize: '12px', fontWeight: 'bold', minWidth: '30px' }}>{inactiveVehicles}</Text>
-                      </div>
-                    </div>
-                  </div>
-
-                </Card>
-              </Col>
-              
-            </Row>
           </div>
         );
 
@@ -3988,13 +4474,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     );
   }
 
+  // Efeito para animar entrada do dashboard
+  useEffect(() => {
+    if (!splashState.isVisible) {
+      // Pequeno delay para transição suave
+      const timer = setTimeout(() => {
+        setIsDashboardVisible(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [splashState.isVisible]);
+
   return (
     <Layout
       className="responsive-layout"
       style={{
         minHeight: '100vh',
         background: layoutBackground,
-        transition: 'background-color 0.3s ease',
+        opacity: isDashboardVisible ? 1 : 0,
+        transform: isDashboardVisible ? 'translateY(0)' : 'translateY(20px)',
+        transition: 'opacity 0.5s ease-in-out, transform 0.5s ease-in-out, background-color 0.3s ease',
       }}
     >
       {/* Rate Limiting Status */}
@@ -4106,6 +4605,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 {theme === 'light' ? t('switch_to_dark') : t('switch_to_light')}
               </Button>
             )}
+            
+            {/* Botão de Toggle do Drawer */}
+            <Button
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+              block
+              style={{
+                background: isDarkTheme ? 'rgba(255,255,255,0.08)' : '#f0f5ff',
+                borderColor: isDarkTheme ? 'rgba(255,255,255,0.12)' : '#d6e4ff',
+                color: isDarkTheme ? '#fff' : '#1d4ed8'
+              }}
+            >
+              {collapsed ? 'Expandir' : 'Recolher'}
+            </Button>
+            
             <Button
               danger
               icon={<LogoutOutlined />}
@@ -4208,13 +4722,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         }
       `}</style>
       
-      {/* Tela de Boas-vindas */}
-      {showWelcome && (
-        <WelcomeScreen 
-          onComplete={() => setShowWelcome(false)}
-          userName={localStorage.getItem('auth-user') || undefined}
-        />
-      )}
       
       {/* Loader para Grande Escala */}
       <LargeScaleLoader
@@ -4235,6 +4742,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           setIsLargeScaleLoading(false);
         }}
       />
+
+      {/* Splash Screen */}
+      <SplashScreen
+        isVisible={splashState.isVisible}
+        message={splashState.message}
+      />
+
     </Layout>
   );
 };

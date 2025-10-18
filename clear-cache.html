@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpar Cache - TrackMax</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { background-color: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .error { background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; color: #0c5460; padding: 10px; border-radius: 4px; margin: 10px 0; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        button.danger { background-color: #dc3545; }
+        button.danger:hover { background-color: #c82333; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Limpar Cache - TrackMax</h1>
+        
+        <div class="info">
+            <h3>Problema Identificado:</h3>
+            <p>O erro 401 está ocorrendo porque a aplicação está usando credenciais antigas armazenadas no cache do navegador.</p>
+            <p><strong>Credenciais corretas:</strong> ndev:2025</p>
+        </div>
+
+        <div id="status"></div>
+
+        <div>
+            <h3>Ações Disponíveis:</h3>
+            <button onclick="checkCurrentCredentials()">Verificar Credenciais Atuais</button>
+            <button onclick="clearAuthCache()" class="danger">Limpar Cache de Autenticação</button>
+            <button onclick="clearAllCache()" class="danger">Limpar Todo o Cache</button>
+            <button onclick="redirectToApp()">Ir para a Aplicação</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+
+        function showResults(message) {
+            const results = document.getElementById('results');
+            results.innerHTML = `<pre>${message}</pre>`;
+        }
+
+        function checkCurrentCredentials() {
+            const authCredentials = localStorage.getItem('auth-credentials');
+            const authUser = localStorage.getItem('auth-user');
+            
+            let message = 'Credenciais atuais no localStorage:\n';
+            message += `auth-credentials: ${authCredentials || 'Não encontrado'}\n`;
+            message += `auth-user: ${authUser || 'Não encontrado'}\n\n`;
+            
+            if (authCredentials) {
+                try {
+                    const decoded = atob(authCredentials);
+                    message += `Credenciais decodificadas: ${decoded}\n`;
+                    
+                    if (decoded === 'admin:admin') {
+                        message += '\n⚠️ PROBLEMA: Usando credenciais antigas (admin:admin)\n';
+                        message += '✅ SOLUÇÃO: Use ndev:2025';
+                        showStatus('Credenciais antigas detectadas! Use o botão "Limpar Cache" abaixo.', 'error');
+                    } else if (decoded === 'ndev:2025') {
+                        message += '\n✅ Credenciais corretas detectadas!';
+                        showStatus('Credenciais corretas! O problema pode ser outro.', 'success');
+                    } else {
+                        message += `\n❓ Credenciais desconhecidas: ${decoded}`;
+                        showStatus('Credenciais desconhecidas detectadas.', 'error');
+                    }
+                } catch (e) {
+                    message += `\n❌ Erro ao decodificar credenciais: ${e.message}`;
+                    showStatus('Erro ao decodificar credenciais.', 'error');
+                }
+            } else {
+                message += '\n✅ Nenhuma credencial armazenada.';
+                showStatus('Nenhuma credencial armazenada.', 'success');
+            }
+            
+            showResults(message);
+        }
+
+        function clearAuthCache() {
+            try {
+                localStorage.removeItem('auth-credentials');
+                localStorage.removeItem('auth-user');
+                
+                showStatus('✅ Cache de autenticação limpo com sucesso!', 'success');
+                showResults('Itens removidos:\n- auth-credentials\n- auth-user\n\nAgora você pode fazer login com ndev:2025');
+            } catch (e) {
+                showStatus('❌ Erro ao limpar cache: ' + e.message, 'error');
+            }
+        }
+
+        function clearAllCache() {
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                showStatus('✅ Todo o cache foi limpo com sucesso!', 'success');
+                showResults('Todo o cache foi limpo:\n- localStorage\n- sessionStorage\n\nAgora você pode fazer login com ndev:2025');
+            } catch (e) {
+                showStatus('❌ Erro ao limpar cache: ' + e.message, 'error');
+            }
+        }
+
+        function redirectToApp() {
+            window.location.href = 'https://dashboard-trackmax-web.web.app';
+        }
+
+        // Verificar credenciais automaticamente ao carregar a página
+        window.onload = function() {
+            checkCurrentCredentials();
+        };
+    </script>
+</body>
+</html>
+
+
+

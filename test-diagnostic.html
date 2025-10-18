@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnóstico - Aplicação TrackMax</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .status-icon {
+            font-size: 24px;
+            margin-right: 12px;
+        }
+        .status-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .status-success {
+            border-left: 4px solid #28a745;
+        }
+        .status-error {
+            border-left: 4px solid #dc3545;
+        }
+        .status-warning {
+            border-left: 4px solid #ffc107;
+        }
+        .status-info {
+            border-left: 4px solid #17a2b8;
+        }
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin-bottom: 4px;
+            padding: 4px;
+            border-radius: 2px;
+        }
+        .log-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .log-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .log-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .log-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: #f5f5f5;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            border-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .section-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Diagnóstico - Aplicação TrackMax</h1>
+        <p>Verificando se a aplicação está funcionando corretamente.</p>
+        
+        <h2 class="section-title">🌐 Testes de Conectividade</h2>
+        
+        <div class="status-card" id="mainAppStatus">
+            <div class="status-header">
+                <div class="status-icon">🏠</div>
+                <div class="status-title">Aplicação Principal</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="testMainApp()">Testar Aplicação</button>
+                <button class="btn btn-primary" onclick="testLogin()">Testar Login</button>
+                <button class="btn btn-primary" onclick="testAPI()">Testar API</button>
+            </div>
+            <div class="log-container" id="mainAppLog"></div>
+        </div>
+
+        <div class="status-card" id="apiStatus">
+            <div class="status-header">
+                <div class="status-icon">🔌</div>
+                <div class="status-title">API e Proxies</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-success" onclick="testCloudflareWorker()">Testar Cloudflare Worker</button>
+                <button class="btn btn-success" onclick="testNetlifyProxy()">Testar Netlify Proxy</button>
+                <button class="btn btn-success" onclick="testDirectAPI()">Testar API Direta</button>
+            </div>
+            <div class="log-container" id="apiLog"></div>
+        </div>
+
+        <div class="status-card" id="credentialsStatus">
+            <div class="status-header">
+                <div class="status-icon">🔐</div>
+                <div class="status-title">Credenciais</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-warning" onclick="testCredentials()">Testar Credenciais</button>
+                <button class="btn btn-warning" onclick="testDevices()">Testar Dispositivos</button>
+                <button class="btn btn-warning" onclick="testPositions()">Testar Posições</button>
+            </div>
+            <div class="log-container" id="credentialsLog"></div>
+        </div>
+
+        <div class="status-card" id="performanceStatus">
+            <div class="status-header">
+                <div class="status-icon">⚡</div>
+                <div class="status-title">Performance</div>
+            </div>
+            <div class="button-group">
+                <button class="btn btn-danger" onclick="testRateLimit()">Testar Rate Limit</button>
+                <button class="btn btn-danger" onclick="testBatchProcessing()">Testar Lotes</button>
+                <button class="btn btn-danger" onclick="clearLogs()">Limpar Logs</button>
+            </div>
+            <div class="log-container" id="performanceLog"></div>
+        </div>
+    </div>
+
+    <script>
+        const credentials = 'mfrastreamentook@hotmail.com:987036752';
+        const base64Credentials = btoa(credentials);
+        const API_BASE_URL = 'https://trackmax-proxy.trackmax-proxy.workers.dev/api';
+        const NETLIFY_PROXY = 'https://dashboard-trackmax.netlify.app/.netlify/functions/proxy';
+        const DIRECT_API = 'http://35.230.168.225:8082/api';
+
+        function log(message, type = 'info', containerId = 'mainAppLog') {
+            const container = document.getElementById(containerId);
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(cardId, status) {
+            const card = document.getElementById(cardId);
+            card.className = `status-card status-${status}`;
+        }
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const startTime = Date.now();
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Authorization': `Basic ${base64Credentials}`,
+                        'Accept': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                const duration = Date.now() - startTime;
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return { success: true, data, duration, status: response.status };
+                } else {
+                    return { success: false, error: `HTTP ${response.status}`, status: response.status, duration };
+                }
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function testMainApp() {
+            log('🏠 Testando aplicação principal...', 'info');
+            updateStatus('mainAppStatus', 'info');
+            
+            try {
+                const response = await fetch('https://dashboard-trackmax-web.web.app/');
+                if (response.ok) {
+                    log('✅ Aplicação principal acessível', 'success');
+                    updateStatus('mainAppStatus', 'success');
+                } else {
+                    log(`❌ Aplicação principal com erro: ${response.status}`, 'error');
+                    updateStatus('mainAppStatus', 'error');
+                }
+            } catch (error) {
+                log(`💥 Erro ao acessar aplicação: ${error.message}`, 'error');
+                updateStatus('mainAppStatus', 'error');
+            }
+        }
+
+        async function testLogin() {
+            log('🔐 Testando processo de login...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/server`);
+            if (result.success) {
+                log(`✅ Login bem-sucedido! Servidor: ${result.data.server || 'N/A'}`, 'success');
+                updateStatus('mainAppStatus', 'success');
+            } else {
+                log(`❌ Falha no login: ${result.error}`, 'error');
+                updateStatus('mainAppStatus', 'error');
+            }
+        }
+
+        async function testAPI() {
+            log('🔌 Testando API geral...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/server`);
+            if (result.success) {
+                log(`✅ API funcionando! Tempo: ${result.duration}ms`, 'success');
+                updateStatus('apiStatus', 'success');
+            } else {
+                log(`❌ API com erro: ${result.error}`, 'error');
+                updateStatus('apiStatus', 'error');
+            }
+        }
+
+        async function testCloudflareWorker() {
+            log('☁️ Testando Cloudflare Worker...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/server`);
+            if (result.success) {
+                log(`✅ Cloudflare Worker funcionando! Tempo: ${result.duration}ms`, 'success');
+                updateStatus('apiStatus', 'success');
+            } else {
+                log(`❌ Cloudflare Worker com erro: ${result.error}`, 'error');
+                updateStatus('apiStatus', 'error');
+            }
+        }
+
+        async function testNetlifyProxy() {
+            log('🌐 Testando Netlify Proxy...', 'info');
+            
+            const result = await makeRequest(`${NETLIFY_PROXY}/server`);
+            if (result.success) {
+                log(`✅ Netlify Proxy funcionando! Tempo: ${result.duration}ms`, 'success');
+                updateStatus('apiStatus', 'success');
+            } else {
+                log(`❌ Netlify Proxy com erro: ${result.error}`, 'error');
+                updateStatus('apiStatus', 'error');
+            }
+        }
+
+        async function testDirectAPI() {
+            log('🎯 Testando API direta...', 'info');
+            
+            const result = await makeRequest(`${DIRECT_API}/server`);
+            if (result.success) {
+                log(`✅ API direta funcionando! Tempo: ${result.duration}ms`, 'success');
+                updateStatus('apiStatus', 'success');
+            } else {
+                log(`❌ API direta com erro: ${result.error}`, 'error');
+                updateStatus('apiStatus', 'error');
+            }
+        }
+
+        async function testCredentials() {
+            log('🔐 Testando credenciais específicas...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/server`);
+            if (result.success) {
+                log(`✅ Credenciais válidas! Servidor: ${result.data.server || 'N/A'}`, 'success');
+                updateStatus('credentialsStatus', 'success');
+            } else {
+                log(`❌ Credenciais inválidas: ${result.error}`, 'error');
+                updateStatus('credentialsStatus', 'error');
+            }
+        }
+
+        async function testDevices() {
+            log('📱 Testando busca de dispositivos...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/devices?limit=5`);
+            if (result.success) {
+                log(`✅ ${result.data.length} dispositivos encontrados`, 'success');
+                updateStatus('credentialsStatus', 'success');
+            } else {
+                log(`❌ Erro ao buscar dispositivos: ${result.error}`, 'error');
+                updateStatus('credentialsStatus', 'error');
+            }
+        }
+
+        async function testPositions() {
+            log('📍 Testando busca de posições...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/positions?limit=5`);
+            if (result.success) {
+                log(`✅ ${result.data.length} posições encontradas`, 'success');
+                updateStatus('credentialsStatus', 'success');
+            } else {
+                log(`❌ Erro ao buscar posições: ${result.error}`, 'error');
+                updateStatus('credentialsStatus', 'error');
+            }
+        }
+
+        async function testRateLimit() {
+            log('⚡ Testando rate limit...', 'info');
+            
+            const requests = [];
+            for (let i = 0; i < 10; i++) {
+                requests.push(makeRequest(`${API_BASE_URL}/server`));
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            
+            const results = await Promise.all(requests);
+            const successful = results.filter(r => r.success).length;
+            const rateLimited = results.filter(r => r.status === 429).length;
+            
+            if (rateLimited > 0) {
+                log(`⚠️ Rate limit detectado: ${rateLimited} erros 429`, 'warning');
+                updateStatus('performanceStatus', 'warning');
+            } else {
+                log(`✅ Nenhum rate limit detectado! ${successful}/10 sucessos`, 'success');
+                updateStatus('performanceStatus', 'success');
+            }
+        }
+
+        async function testBatchProcessing() {
+            log('📦 Testando processamento em lotes...', 'info');
+            
+            const result = await makeRequest(`${API_BASE_URL}/devices?limit=20`);
+            if (result.success) {
+                log(`✅ Lote processado: ${result.data.length} dispositivos em ${result.duration}ms`, 'success');
+                updateStatus('performanceStatus', 'success');
+            } else {
+                log(`❌ Erro no processamento em lote: ${result.error}`, 'error');
+                updateStatus('performanceStatus', 'error');
+            }
+        }
+
+        function clearLogs() {
+            const containers = ['mainAppLog', 'apiLog', 'credentialsLog', 'performanceLog'];
+            containers.forEach(id => {
+                document.getElementById(id).innerHTML = '';
+            });
+            log('🧹 Logs limpos', 'info');
+        }
+
+        // Executar diagnóstico automático
+        window.addEventListener('load', async () => {
+            log('🚀 Iniciando diagnóstico automático...', 'info');
+            
+            // Testar aplicação principal
+            await testMainApp();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Testar API
+            await testAPI();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Testar credenciais
+            await testCredentials();
+            
+            log('✅ Diagnóstico automático concluído', 'success');
+        });
+        
+        console.log('🔍 Diagnóstico carregado');
+        console.log('🔐 Credenciais:', credentials);
+        console.log('🌐 API Base:', API_BASE_URL);
+    </script>
+</body>
+</html>
+
+
+

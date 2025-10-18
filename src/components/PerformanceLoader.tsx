@@ -151,7 +151,7 @@ export const PerformanceLoader: React.FC<PerformanceLoaderProps> = ({
             border: '1px solid rgba(255,255,255,0.2)',
             backdropFilter: 'blur(10px)'
           }}
-          bodyStyle={{ padding: 16 }}
+          styles={{ body: { padding: 16 } }}
         >
           <Title level={5} style={{ margin: 0, marginBottom: 16, color: 'white' }}>
             <DesktopOutlined /> Monitoramento de Performance
