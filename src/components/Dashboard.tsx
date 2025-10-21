@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Layout, Menu, Typography, Card, Avatar, Button, Tag, Space, Input, InputNumber, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge } from 'antd';
+import { Layout, Menu, Typography, Card, Button, Tag, Space, Input, InputNumber, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge } from 'antd';
 import type { MenuProps } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
 import { Card as ShadcnCard, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge as ShadcnBadge } from '@/components/ui/badge';
 import { Progress as ShadcnProgress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 // import packageJson from '../../package.json'; // Removido para evitar problemas de build
 import { 
   CarOutlined, 
@@ -254,6 +255,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   // Sincronizar activeTab com a rota atual
   useEffect(() => {
     const path = location.pathname;
+    console.log('Rota atual:', path);
+    console.log('Splash screen visível:', splashState.isVisible);
     if (path === '/dashboard' || path === '/') {
       setActiveTab('dashboard');
     } else if (path === '/settings') {
@@ -286,6 +289,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const sidebarBackground = 'var(--bg-sidebar-gradient)';
   const sidebarBorder = '1px solid var(--sidebar-border-color)';
   const sidebarShadow = 'var(--sidebar-shadow)';
+  
+  // Componente de perfil do usuário
+  const UserProfileSection = () => (
+    <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <div className="flex items-center gap-3">
+        <Avatar className="h-10 w-10">
+          <AvatarImage src="/user-avatar.jpg" alt="User" />
+          <AvatarFallback className="bg-blue-500 text-white font-semibold">
+            U
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-900 truncate">
+            Usuário
+          </p>
+          <p className="text-xs text-slate-500 truncate">
+            usuario@trackmax.com
+          </p>
+        </div>
+        <div className="flex flex-col items-end">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-xs text-slate-500">Online</span>
+        </div>
+      </div>
+    </div>
+  );
   const headerBackground = 'var(--bg-card)';
   const headerShadow = isDarkTheme
     ? '0 2px 12px rgba(0,0,0,0.5)'
@@ -501,7 +530,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     }
 
     setHasSearched(true);
-
+    
     try {
       console.log('🔍 DEBUG - Starting fetchTripsForRange');
       
@@ -615,7 +644,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     {
       key: 'dashboard',
       icon: <DashboardOutlined />, 
-      label: t('dashboard'),
+      label: (
+        <div className="flex items-center justify-between w-full">
+          <span>{t('dashboard')}</span>
+          <ShadcnBadge variant="secondary" className="text-xs">
+            {effectiveDevices.length}
+          </ShadcnBadge>
+        </div>
+      ),
       onClick: () => {
         setActiveTab('dashboard');
         navigate('/dashboard');
@@ -626,13 +662,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           {
             key: 'vehicles',
             icon: <CarOutlined />,
-            label: t('vehicles'),
+            label: (
+              <div className="flex items-center justify-between w-full">
+                <span>{t('vehicles')}</span>
+                <ShadcnBadge variant="outline" className="text-xs">
+                  {allDevices.length}
+                </ShadcnBadge>
+              </div>
+            ),
             onClick: () => setActiveTab('vehicles')
           },
           {
             key: 'map',
             icon: <GlobalOutlined />,
-            label: 'Mapa',
+            label: (
+              <div className="flex items-center justify-between w-full">
+                <span>Mapa</span>
+                <div className="w-2 h-2 bg-green-500 rounded-full" />
+              </div>
+            ),
             onClick: () => setActiveTab('map')
           },
           {
@@ -666,8 +714,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       icon: <SettingOutlined />,
       label: t('settings'),
       onClick: () => {
+        console.log('Clicando em configurações');
+        console.log('Splash screen antes da navegação:', splashState.isVisible);
         setActiveTab('settings');
         navigate('/settings');
+        console.log('Navegação para /settings executada');
       }
     }
   ];
@@ -1490,7 +1541,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         
         if (isOffline72h) {
           return {
-            device,
+        device,
             lastUpdate: device.lastUpdate,
             lastUpdateDate: lastUpdate
           };
@@ -1848,88 +1899,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             case 'dashboard':
         return (
           <div style={{ padding: isMobile ? '16px' : '24px', position: 'relative' }}>
-            {/* Barra de Progresso no Topo */}
-            { (isSearching || isRangeUpdating) && (
-              <div style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '3px',
-                backgroundColor: '#e2e8f0',
-                zIndex: 10000
-              }}>
-                <div style={{
-                  height: '100%',
-                  background: 'linear-gradient(90deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
-                  animation: 'progressBar 2s ease-in-out infinite',
-                  width: '100%'
-                }} />
-              </div>
-            )}
 
-            {/* Loading Overlay Melhorado */}
-            { (isSearching || isRangeUpdating) && (
-              <div
-                style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  zIndex: 9999,
-                  transition: 'all 0.3s ease-in-out',
-                }}
-              >
-                <div style={{
-                  background: 'white',
-                  borderRadius: '16px',
-                  padding: '32px',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-                  border: '1px solid rgba(0, 0, 0, 0.05)',
-                  maxWidth: '400px',
-                  textAlign: 'center'
-                }}>
-                <Spin size="large" />
-                  <Text style={{ 
-                    marginTop: '20px', 
-                    fontSize: '16px', 
-                    color: '#1a1a2e',
-                    fontWeight: '500',
-                    display: 'block'
-                  }}>
-                    {isRangeUpdating
-                      ? 'Atualizando dados do período selecionado...'
-                      : isLargeFleetLoading
-                    ? 'Carregando dados da frota grande (pode levar alguns minutos)...'
-                        : 'Buscando dados das placas no período selecionado...'}
-                </Text>
-                  {isSearching && isLargeFleetLoading && (
-                    <Text style={{ 
-                      marginTop: '12px', 
-                      fontSize: '14px', 
-                      color: '#666',
-                      display: 'block'
-                    }}>
-                    Otimizando período para 6 horas para melhor performance
-                  </Text>
-                )}
-                  <div style={{
-                    marginTop: '16px',
-                    fontSize: '12px',
-                    color: '#999',
-                    opacity: 0.8
-                  }}>
-                    Por favor, aguarde...
-                  </div>
-                </div>
-              </div>
-            )}
             <div
               style={{
                 display: 'flex',
@@ -2993,7 +2963,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         <div style={{ width: '100%' }}>
                         <Space direction="vertical" size={2} style={{ width: '100%' }}>
                           <Space size={8}>
-                              <Avatar size="small" icon={<UserOutlined />} />
+                              <Avatar><UserOutlined /></Avatar>
                               <Text strong>{driver.name}</Text>
                               {driver.licenseCategory && <Tag color="blue">CNH {driver.licenseCategory}</Tag>}
                           </Space>
@@ -4501,155 +4471,178 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         isActive={isRateLimited} 
         onRetry={resetRateLimit}
       />
-      {/* Drawer/Sidebar com animações */}
-      <Sider 
-        trigger={null} 
-        collapsible 
-        collapsed={collapsed}
-        className="responsive-sidebar"
+      {/* Drawer/Sidebar moderno - FIXO */}
+      <div 
+        className={`bg-white border-r border-slate-200 shadow-xl transition-all duration-300 ${
+          collapsed ? 'w-20' : 'w-80'
+        }`}
         style={{
-          background: sidebarBackground,
-          borderRight: sidebarBorder,
-          boxShadow: sidebarShadow,
-          transition: 'all 0.3s ease',
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-        width={280}
-        collapsedWidth={80}
-        breakpoint="md"
-        onBreakpoint={(broken) => {
-          if (broken) {
-            setCollapsed(true);
-          }
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          height: '100vh',
+          width: collapsed ? '80px' : '320px',
+          background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+          boxShadow: '0 10px 25px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          zIndex: 1000,
+          transform: 'translateZ(0)'
         }}
       >
-        <div style={{ 
-          padding: '24px 16px', 
-          textAlign: 'center',
-          borderBottom: sidebarBorder,
-          marginBottom: '16px'
-        }}>
-          {!collapsed ? (
-          <div style={{
-            display: 'flex',
-              flexDirection: 'column', 
-            alignItems: 'center',
-              gap: '8px'
-            }}>
-              <img 
-                src="/image.png" 
-                alt="TrackMAX Gestão de Frotas"
-                style={{
-                  maxWidth: '180px',
-                  height: 'auto',
-                  objectFit: 'contain'
-                }}
-              />
-          </div>
-          ) : (
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center',
-              gap: '4px'
-            }}>
+        {/* Header moderno */}
+        <div className="p-6 border-b border-slate-200 bg-white">
+          <div className="flex justify-center items-center">
               <img 
                 src="/image.png" 
                 alt="TrackMAX"
-                style={{
-                  maxWidth: '40px',
-                  height: 'auto',
-                  objectFit: 'contain'
-                }}
+              className={`rounded-lg ${collapsed ? 'h-13 w-13' : 'h-17 w-17'}`}
               />
             </div>
-          )}
         </div>
         
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <Menu
-            theme={isDarkTheme ? 'dark' : 'light'}
-            mode="inline"
-            selectedKeys={[activeTab]}
-            items={menuItems}
+        
+        {/* Menu de navegação moderno */}
+        <div className="flex-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+          <nav className="p-4 space-y-2">
+            {menuItems.map((item) => {
+              if (!item || typeof item === 'string') return null;
+              return (
+                <div
+                  key={item.key}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 cursor-pointer group ${
+                    activeTab === item.key 
+                      ? 'bg-blue-50 text-blue-700 border-l-4 border-blue-500' 
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                  onClick={() => {
+                    if ('onClick' in item && item.onClick) {
+                      console.log('Navegando para:', item.key);
+                      item.onClick({} as any);
+                    }
+                  }}
+                >
+                  <div className="text-lg">{'icon' in item ? item.icon : null}</div>
+                  {!collapsed && (
+                    <div className="flex-1 flex items-center justify-between">
+                      <span className="font-medium">{'label' in item ? item.label : ''}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+        {/* Seção de ações - FIXA na parte inferior */}
+        <div 
+          className="p-4 border-t border-slate-200 bg-slate-50"
             style={{
-              background: 'transparent',
-              border: 'none',
-              flex: 1,
-              overflowY: 'auto'
-            }}
-            className={`custom-menu ${isDarkTheme ? 'menu-dark' : 'menu-light'}`}
-          />
-          <div
-            style={{
-              marginTop: 'auto',
-              padding: collapsed ? '16px 12px' : '20px 16px',
-              borderTop: '1px solid var(--sidebar-border-color)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}
-          >
+            position: 'sticky',
+            bottom: 0,
+            backgroundColor: '#f8fafc',
+            borderTop: '1px solid #e2e8f0'
+          }}
+        >
+          <div className="space-y-3">
+            
             {isDebugMode && (
-              <Button
-                icon={<BulbOutlined />}
+              <button
                 onClick={() => toggleTheme()}
-                block
-                style={{
-                  background: isDarkTheme ? 'rgba(255,255,255,0.08)' : '#f0f5ff',
-                  borderColor: isDarkTheme ? 'rgba(255,255,255,0.12)' : '#d6e4ff',
-                  color: isDarkTheme ? '#fff' : '#1d4ed8'
-                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                {theme === 'light' ? t('switch_to_dark') : t('switch_to_light')}
-              </Button>
+                <BulbOutlined className="text-lg" />
+                {!collapsed && (
+                  <span className="text-sm font-medium">
+                    {theme === 'light' ? 'Modo Escuro' : 'Modo Claro'}
+                  </span>
+                )}
+              </button>
             )}
             
-            {/* Botão de Toggle do Drawer */}
-            <Button
-              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
-              block
-              style={{
-                background: isDarkTheme ? 'rgba(255,255,255,0.08)' : '#f0f5ff',
-                borderColor: isDarkTheme ? 'rgba(255,255,255,0.12)' : '#d6e4ff',
-                color: isDarkTheme ? '#fff' : '#1d4ed8'
-              }}
+            {/* Botão de Sair */}
+            <button
+              onClick={() => setLogoutModalVisible(true)}
+              className="w-full flex items-center gap-3 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
-              {collapsed ? 'Expandir' : 'Recolher'}
-            </Button>
+              <LogoutOutlined className="text-lg" />
+              {!collapsed && (
+                <span className="text-sm font-medium">
+                  Sair
+                </span>
+              )}
+            </button>
             
-            <Button
-              danger
-              icon={<LogoutOutlined />}
-              onClick={handleLogout}
-              block
+            {/* Botão de Toggle */}
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="w-full flex items-center gap-3 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
             >
-              {t('logout')}
-            </Button>
-            <Text
-              type="secondary"
-              style={{
-                fontSize: '12px',
-                textAlign: 'center',
-                color: isDarkTheme ? '#94a3b8' : '#64748b'
-              }}
-            >
-              {t('version')} {appVersion}
-            </Text>
-          </div>
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              {!collapsed && (
+                <span className="text-sm font-medium">
+                  {collapsed ? 'Expandir' : 'Recolher'}
+                </span>
+              )}
+            </button>
+            
+            {/* Usuário logado - NO FINAL */}
+            {!collapsed && (
+              <div className="flex items-center gap-3 px-3 py-4 bg-white rounded-lg border border-slate-200 mt-12 mb-4">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src="/user-avatar.jpg" alt="User" />
+                  <AvatarFallback className="bg-blue-500 text-white text-xs font-semibold">
+                    U
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
+                    Usuário Logado
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">
+                    usuario@trackmax.com
+                  </p>
+                </div>
+              </div>
+            )}
+            
+            {/* Versão - NO FINAL */}
+            {!collapsed && (
+              <div className="px-3 py-3 mt-6 mb-4">
+                <p className="text-xs text-slate-500 text-center">
+                  Versão 1.0.0
+                </p>
+              </div>
+            )}
         </div>
-      </Sider>
+        </div>
+      </div>
 
-      <Layout>
+      {/* Overlay para mobile */}
+      {!collapsed && isMobile && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setCollapsed(true)}
+        />
+      )}
+
+      <Layout 
+        style={{
+          marginLeft: collapsed ? '80px' : '320px',
+          height: '100vh',
+          position: 'relative',
+          transition: 'margin-left 0.3s ease',
+          overflow: 'hidden'
+        }}
+      >
 
         {/* Main Content */}
         <Content className="responsive-content" style={{ 
           margin: '0',
           padding: isMobile ? '16px' : '24px',
           background: contentBackground,
-          minHeight: '100vh'
+          height: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden'
         }}>
           {renderContent()}
         </Content>
