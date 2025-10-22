@@ -193,6 +193,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   // Estado para preço do combustível
   const [fuelPrice, setFuelPrice] = useState<number>(5.5);
   const [fuelPriceOverrides, setFuelPriceOverrides] = useState<Record<number, number>>({});
+  const [showFuelPriceInput, setShowFuelPriceInput] = useState(false);
   
   // Estado para busca de veículos no card de eficiência
   const [vehicleEfficiencySearch, setVehicleEfficiencySearch] = useState<string>('');
@@ -1381,6 +1382,35 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return sortedDailyKeys.slice(sortedDailyKeys.length - fallbackCount, sortedDailyKeys.length);
   }, [sortedDailyKeys, dateRange]);
 
+  const formatPeriodLabel = useCallback((keys: string[]): string => {
+    if (!keys.length) {
+      return 'Período selecionado';
+    }
+    const start = dayjs(keys[0]);
+    const end = dayjs(keys[keys.length - 1]);
+    if (start.isSame(end, 'day')) {
+      return start.format('DD MMM YYYY');
+    }
+    return `${start.format('DD MMM YYYY')} – ${end.format('DD MMM YYYY')}`;
+  }, []);
+
+  const currentRangeLabel = useMemo(
+    () => formatPeriodLabel(rangeKeys),
+    [rangeKeys, formatPeriodLabel],
+  );
+
+  const previousRangeKeys = useMemo(() => {
+    if (!rangeKeys.length) {
+      return [];
+    }
+    return rangeKeys.map((key) => dayjs(key).subtract(1, 'month').format('YYYY-MM-DD'));
+  }, [rangeKeys]);
+
+  const previousRangeLabel = useMemo(
+    () => previousRangeKeys.length ? formatPeriodLabel(previousRangeKeys) : 'Período anterior',
+    [previousRangeKeys, formatPeriodLabel],
+  );
+
   const dailyEventSummary = useMemo(() => {
     const map = new Map<string, { stops: number; idle: number; overspeed: number; alerts: number; fuel: number }>();
     events.forEach((event) => {
@@ -1450,9 +1480,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
   const engineSparklinePoints = dailyEngineSeries;
 
-  const distanceTrendLabels = useMemo(
-    () => rangeKeys.map((key) => dayjs(key).format('MMM D')),
-    [rangeKeys],
+  const maxVisualPoints = 45;
+
+  const aggregateSeries = useCallback(
+    (keys: string[], getValue: (key: string) => number) => {
+      if (keys.length <= maxVisualPoints) {
+        return {
+          values: keys.map(getValue),
+          labels: keys.map((key) => dayjs(key).format('MMM D')),
+        };
+      }
+
+      const bucketSize = Math.ceil(keys.length / maxVisualPoints);
+      const values: number[] = [];
+      const labels: string[] = [];
+
+      for (let i = 0; i < keys.length; i += bucketSize) {
+        const bucket = keys.slice(i, i + bucketSize);
+        const aggregated = bucket.reduce((sum, key) => sum + getValue(key), 0);
+        values.push(aggregated);
+        const startLabel = dayjs(bucket[0]).format('DD MMM');
+        const endLabel = dayjs(bucket[bucket.length - 1]).format('DD MMM');
+        labels.push(startLabel === endLabel ? startLabel : `${startLabel} - ${endLabel}`);
+      }
+
+      return { values, labels };
+    },
+    [maxVisualPoints],
   );
 
   const FLEET_IDLE_FUEL_RATE = 0.8;
@@ -1472,23 +1526,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   );
 
   const weeklySampleCount = rangeKeys.length;
-  const weeklyLabel = weeklySampleCount === 1
-    ? 'Último dia'
-    : `Últimos ${weeklySampleCount || 1} dias`;
-  const previousLabel = weeklySampleCount === 1
-    ? 'Dia anterior'
-    : `Período anterior (${weeklySampleCount || 1} dias)`;
+  const weeklyLabel = currentRangeLabel;
+  const previousLabel = previousRangeLabel;
   const weeklyKeys = rangeKeys;
-  const previousKeys = useMemo(() => {
-    if (weeklySampleCount === 0) return [];
-    const firstKey = weeklyKeys[0];
-    const firstIndex = sortedDailyKeys.findIndex((key) => key === firstKey);
-    if (firstIndex <= 0) {
-      return [];
-    }
-    const start = Math.max(0, firstIndex - weeklySampleCount);
-    return sortedDailyKeys.slice(start, firstIndex);
-  }, [weeklySampleCount, weeklyKeys, sortedDailyKeys]);
+  const previousKeys = previousRangeKeys;
 
   const sumDistanceForKeys = (keys: string[]) =>
     keys.reduce((sum, key) => sum + (dailyTripStats.get(key)?.distanceKm ?? 0), 0);
@@ -1699,22 +1740,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     };
   }, [dailyTripStats, rangeKeys, dailyIdleSeries, dailyEventSummary, weeklyLabel]);
 
-  const distanceTrendChart = useMemo<TrendLineChartProps>(() => {
-    const points = rangeKeys.map((key) => {
-      const stats = dailyTripStats.get(key);
-      return stats ? Number(stats.distanceKm.toFixed(2)) : 0;
-    });
+  const distanceTrendSeries = useMemo(() => {
+    return aggregateSeries(rangeKeys, (key) => dailyTripStats.get(key)?.distanceKm ?? 0);
+  }, [aggregateSeries, rangeKeys, dailyTripStats]);
 
-    return {
-      title: 'Distância total',
-      subtitle: weeklyLabel,
-      points,
-      labels: distanceTrendLabels,
-      accentColor: '#38bdf8',
-      formatter: (value) => `${formatNumber(value, 1)} km`,
-      yLabel: 'km',
-    };
-  }, [dailyTripStats, rangeKeys, distanceTrendLabels, formatNumber, weeklyLabel]);
+  const distanceTrendChart = useMemo<TrendLineChartProps>(() => ({
+    title: 'Distância total',
+    subtitle: weeklyLabel,
+    points: distanceTrendSeries.values.map((value) => Number(value.toFixed(2))),
+    labels: distanceTrendSeries.labels,
+    accentColor: '#38bdf8',
+    formatter: (value) => `${formatNumber(value, 1)} km`,
+    yLabel: 'km',
+  }), [distanceTrendSeries, weeklyLabel, formatNumber]);
 
   const driverByDeviceId = useMemo(() => {
     const map = new Map<number, string>();
@@ -1791,15 +1829,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     };
   }, [events, driverByDeviceId, deviceMap]);
 
+  const fuelSeries = useMemo(() => {
+    return aggregateSeries(rangeKeys, (key) => dailyTripStats.get(key)?.fuelLiters ?? 0);
+  }, [aggregateSeries, rangeKeys, dailyTripStats]);
+
   const fuelDrainsChart = useMemo<VerticalBarChartProps>(() => {
-    const data = rangeKeys.map((key) => {
-      const stats = dailyTripStats.get(key);
-      return {
-        label: dayjs(key).format('MMM D'),
-        value: Number(((stats?.fuelLiters ?? 0)).toFixed(2)),
-        color: '#3b82f6',
-      };
-    });
+    const data = fuelSeries.values.map((value, index) => ({
+      label: fuelSeries.labels[index],
+      value: Number(value.toFixed(2)),
+      color: '#3b82f6',
+    }));
 
     const maxValue = Math.max(...data.map((item) => item.value), 1);
 
@@ -1810,7 +1849,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       maxValue: maxValue > 0 ? maxValue : 1,
       showValue: false,
     };
-  }, [dailyTripStats, rangeKeys, weeklyLabel]);
+  }, [fuelSeries, weeklyLabel]);
 
   const kpiCards = useMemo<KpiCardProps[]>(() => {
     const distanceDelta = previousDistanceTotal !== null ? weeklyDistanceTotal - previousDistanceTotal : 0;
@@ -1841,33 +1880,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
     const distanceComparisonDelta = previousDistanceTotal !== null
       ? distancePercent !== null
-        ? `${formatDeltaLabel(distanceDelta, ' km')} (${formatDeltaLabel(distancePercent, '%')})`
-        : formatDeltaLabel(distanceDelta, ' km')
+        ? `${formatDeltaLabel(distanceDelta, ' km', 1)} (${formatDeltaLabel(distancePercent, '%', 1)})`
+        : formatDeltaLabel(distanceDelta, ' km', 1)
       : undefined;
     const engineComparisonDelta = previousEngineTotal !== null
       ? enginePercent !== null
-        ? `${formatDeltaLabel(engineDelta, ' h')} (${formatDeltaLabel(enginePercent, '%')})`
-        : formatDeltaLabel(engineDelta, ' h')
+        ? `${formatDeltaLabel(engineDelta, ' h', 1)} (${formatDeltaLabel(enginePercent, '%', 1)})`
+        : formatDeltaLabel(engineDelta, ' h', 1)
       : undefined;
     const drivingComparisonDelta = previousDrivingTotal !== null
       ? drivingPercent !== null
-        ? `${formatDeltaLabel(drivingDelta, ' h')} (${formatDeltaLabel(drivingPercent, '%')})`
-        : formatDeltaLabel(drivingDelta, ' h')
+        ? `${formatDeltaLabel(drivingDelta, ' h', 1)} (${formatDeltaLabel(drivingPercent, '%', 1)})`
+        : formatDeltaLabel(drivingDelta, ' h', 1)
       : undefined;
     const fuelComparisonDelta = previousFuelTotal !== null
       ? fuelPercent !== null
-        ? `${formatDeltaLabel(fuelDelta, ' L')} (${formatDeltaLabel(fuelPercent, '%')})`
-        : formatDeltaLabel(fuelDelta, ' L')
+        ? `${formatDeltaLabel(fuelDelta, ' L', 1)} (${formatDeltaLabel(fuelPercent, '%', 1)})`
+        : formatDeltaLabel(fuelDelta, ' L', 1)
       : undefined;
     const fuelCostComparisonDelta = previousFuelCostTotal !== null
       ? fuelCostPercent !== null
-        ? `${formatDeltaLabel(fuelCostDelta, ' R$')} (${formatDeltaLabel(fuelCostPercent, '%')})`
-        : formatDeltaLabel(fuelCostDelta, ' R$')
+        ? `${formatDeltaLabel(fuelCostDelta, ' R$', 2)} (${formatDeltaLabel(fuelCostPercent, '%', 1)})`
+        : formatDeltaLabel(fuelCostDelta, ' R$', 2)
       : undefined;
     const idleCostComparisonDelta = previousIdleCostTotal !== null
       ? idleCostPercent !== null
-        ? `${formatDeltaLabel(idleCostDelta, ' R$')} (${formatDeltaLabel(idleCostPercent, '%')})`
-        : formatDeltaLabel(idleCostDelta, ' R$')
+        ? `${formatDeltaLabel(idleCostDelta, ' R$', 2)} (${formatDeltaLabel(idleCostPercent, '%', 1)})`
+        : formatDeltaLabel(idleCostDelta, ' R$', 2)
       : undefined;
 
     return [
@@ -2714,10 +2753,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   padding: isMobile ? '12px' : '20px',
                   borderRadius: '18px',
                   border: '1px solid rgba(148, 163, 184, 0.25)',
-                  background: 'linear-gradient(135deg, rgba(246, 250, 255, 0.8) 0%, rgba(235, 244, 255, 0.9) 100%)',
+                  background: 'linear-gradient(135deg, rgba(246, 250, 255, 0.9) 0%, rgba(221, 232, 255, 0.95) 100%)',
                   boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+                  backdropFilter: 'blur(4px)',
                 }}
               >
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                    justifyContent: 'space-between',
+                    gap: 12,
+                    marginBottom: isMobile ? 12 : 16,
+                  }}
+                >
+                  <div>
+                    <Text strong style={{ color: '#0f172a', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Filtros ativos
+                    </Text>
+                    <div style={{ color: '#64748b', fontSize: '12px', marginTop: 4 }}>
+                      Ajuste rapidamente os dados exibidos no painel
+                    </div>
+                  </div>
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={() => setShowFuelPriceInput((prev) => !prev)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      color: '#0f172a',
+                      background: showFuelPriceInput ? 'rgba(14, 165, 233, 0.12)' : 'transparent',
+                      borderRadius: 999,
+                      paddingInline: 12,
+                    }}
+                  >
+                    {showFuelPriceInput ? 'Ocultar preço de combustível' : 'Informar preço de combustível'}
+                  </Button>
+                </div>
+
                 <Row gutter={[16, 0]} style={{ marginBottom: '8px' }}>
                   <Col xs={24} md={10}>
                     <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
@@ -2729,10 +2805,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                       Período
                     </Text>
                   </Col>
-                  <Col xs={24} md={4} />
+                  <Col xs={24} md={4}>
+                    {showFuelPriceInput && (
+                      <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                        Preço combustível
+                      </Text>
+                    )}
+                  </Col>
                 </Row>
 
-                <Row gutter={[16, 0]} align="middle">
+                <Row gutter={[16, 0]} align="middle" className="custom-filters">
                   <Col xs={24} md={10}>
                     <AutoComplete
                       value={searchPlates}
@@ -2763,6 +2845,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   showTime={{ format: 'HH:mm' }}
                   format="DD/MM/YYYY HH:mm"
                       style={{ width: '100%', height: '40px' }}
+                  dropdownClassName="custom-filter-dropdown"
                   disabledDate={(current) => !!current && current > dayjs()}
                   presets={[
                     { label: 'Últimas 24h', value: [dayjs().subtract(24, 'hour'), dayjs()] },
@@ -2772,53 +2855,63 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 />
                   </Col>
                   <Col xs={24} md={4}>
-                    <Button
-                      type="primary"
-                      onClick={handleSearch}
-                      loading={isSearching}
-                      disabled={isSearching}
-                      style={{ 
-                        width: '100%', 
-                        height: '40px',
-                        background: isSearching 
-                          ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
-                          : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
-                        border: 'none',
-                        boxShadow: isSearching 
-                          ? '0 2px 8px rgba(148, 163, 184, 0.3)'
-                          : '0 4px 12px rgba(96, 165, 250, 0.3)',
-                        transition: 'all 0.3s ease'
-                      }}
-                      icon={!isSearching ? <SearchOutlined /> : undefined}
-                    >
-                      {isSearching ? (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Spin size="small" />
-                          Buscando...
-                        </span>
-                      ) : (
-                        'Buscar'
-                    )}
-                  </Button>
-                </Col>
-                  <Col xs={24} md={4}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                        Preço combustível
-                      </Text>
-                      <InputNumber
-                        value={fuelPrice}
-                        min={0}
-                        step={0.1}
-                        style={{ width: '100%' }}
-                        formatter={(value) => `R$ ${value ?? 0}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                        parser={(value) => Number(value?.replace(/[R$\s.]/g, '').replace(',', '.'))}
-                        onChange={(value) => {
-                          if (typeof value === 'number' && !Number.isNaN(value)) {
-                            setFuelPrice(value);
-                          }
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: showFuelPriceInput ? 8 : 0 }}>
+                      <Button
+                        type="primary"
+                        onClick={handleSearch}
+                        loading={isSearching}
+                        disabled={isSearching}
+                        style={{ 
+                          width: '100%', 
+                          height: '40px',
+                          background: isSearching 
+                            ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
+                            : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
+                          border: 'none',
+                          boxShadow: isSearching 
+                            ? '0 2px 8px rgba(148, 163, 184, 0.3)'
+                            : '0 4px 12px rgba(96, 165, 250, 0.3)',
+                          transition: 'all 0.3s ease'
                         }}
-                      />
+                        icon={!isSearching ? <SearchOutlined /> : undefined}
+                      >
+                        {isSearching ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Spin size="small" />
+                            Buscando...
+                          </span>
+                        ) : (
+                          'Buscar'
+                        )}
+                      </Button>
+                      {showFuelPriceInput && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <InputNumber
+                            value={fuelPrice}
+                            min={0}
+                            step={0.1}
+                            style={{ width: '100%' }}
+                            formatter={(value) => `R$ ${(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            parser={(value) => {
+                              if (!value) return 0;
+                              const normalized = value
+                                .toString()
+                                .replace(/[^\d,.-]/g, '')
+                                .replace(/,/g, '.');
+                              const parsed = parseFloat(normalized);
+                              return Number.isNaN(parsed) ? fuelPrice : parsed;
+                            }}
+                            onChange={(value) => {
+                              if (typeof value === 'number' && !Number.isNaN(value)) {
+                                setFuelPrice(value);
+                              }
+                            }}
+                          />
+                          <Text style={{ fontSize: '11px', color: '#64748b' }}>
+                            Utilizado para estimar custos.
+                          </Text>
+                        </div>
+                      )}
                     </div>
                   </Col>
                 </Row>

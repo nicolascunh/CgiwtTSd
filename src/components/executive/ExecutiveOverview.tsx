@@ -498,51 +498,59 @@ export const VerticalBarChart: React.FC<VerticalBarChartProps> = ({
       </div>
 
       {hasData ? (
-        <div className="mt-5 flex items-end justify-between gap-3">
-          {data.map((item, index) => (
-            <div
-              key={item.label}
-              className="flex flex-col items-center gap-2 text-center"
-              onMouseEnter={() => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-              onFocus={() => setHoveredIndex(index)}
-              onBlur={() => setHoveredIndex(null)}
-            >
-              {showValue && (
-                <div
-                  className="rounded-full px-2 py-0.5 text-xs font-semibold"
-                  style={{ background: `${item.color}20`, color: item.color }}
-                >
-                  {item.value}
-                  {item.suffix ?? ''}
-                </div>
-              )}
-              <div className="flex h-32 w-12 items-end justify-center rounded-lg bg-slate-100">
-                <div
-                  className="w-full rounded-t-lg"
-                  style={{
-                    height: `${(item.value / computedMax) * 100}%`,
-                    background: item.color,
-                  }}
-                />
-              </div>
-              <div className="text-xs font-medium text-slate-500">
-                {item.label}
-              </div>
-              {hoveredIndex === index && (
-                <div className="mt-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow">
-                  <div className="font-semibold text-slate-700">{item.label}</div>
-                  <div>
+        <div
+          className="mt-5"
+          style={{ overflowX: data.length > 6 ? 'auto' : 'visible' }}
+        >
+          <div
+            className="flex items-end justify-start gap-3"
+            style={{ minWidth: Math.max(320, data.length * 60) }}
+          >
+            {data.map((item, index) => (
+              <div
+                key={item.label}
+                className="flex flex-col items-center gap-2 text-center"
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                onFocus={() => setHoveredIndex(index)}
+                onBlur={() => setHoveredIndex(null)}
+              >
+                {showValue && (
+                  <div
+                    className="rounded-full px-2 py-0.5 text-xs font-semibold"
+                    style={{ background: `${item.color}20`, color: item.color }}
+                  >
                     {item.value}
                     {item.suffix ?? ''}
                   </div>
-                  <div className="text-[11px] uppercase tracking-wide text-slate-400">
-                    {(computedMax > 0 ? ((item.value / computedMax) * 100).toFixed(1) : '0.0')}%
-                  </div>
+                )}
+                <div className="flex h-32 w-12 items-end justify-center rounded-lg bg-slate-100">
+                  <div
+                    className="w-full rounded-t-lg"
+                    style={{
+                      height: `${(item.value / computedMax) * 100}%`,
+                      background: item.color,
+                    }}
+                  />
                 </div>
-              )}
-            </div>
-          ))}
+                <div className="text-xs font-medium text-slate-500">
+                  {item.label}
+                </div>
+                {hoveredIndex === index && (
+                  <div className="mt-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow">
+                    <div className="font-semibold text-slate-700">{item.label}</div>
+                    <div>
+                      {item.value}
+                      {item.suffix ?? ''}
+                    </div>
+                    <div className="text-[11px] uppercase tracking-wide text-slate-400">
+                      {(computedMax > 0 ? ((item.value / computedMax) * 100).toFixed(1) : '0.0')}%
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="mt-5">
@@ -595,13 +603,19 @@ export const StackedColumnChart: React.FC<StackedColumnChartProps> = ({
       </div>
 
       {hasData ? (
-        <div className="mt-5 flex items-end gap-4 overflow-x-auto pb-2">
-          {data.map((item, index) => {
-            const total = totals[index];
-            return (
-              <div
-                key={item.label}
-                className="flex flex-col items-center gap-2 text-center"
+        <div
+          className="mt-5 overflow-x-auto pb-2"
+        >
+          <div
+            className="flex items-end gap-4"
+            style={{ minWidth: Math.max(360, data.length * 64) }}
+          >
+            {data.map((item, index) => {
+              const total = totals[index];
+              return (
+                <div
+                  key={item.label}
+                  className="flex flex-col items-center gap-2 text-center"
                 onMouseLeave={() => {
                   setHoveredKey(null);
                   setHoveredSegment(null);
@@ -647,9 +661,10 @@ export const StackedColumnChart: React.FC<StackedColumnChartProps> = ({
                     </div>
                   </div>
                 )}
-              </div>
-            );
-          })}
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="mt-5">
@@ -704,6 +719,8 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({
 
   const lastValue = sanitizedPoints[sanitizedPoints.length - 1] ?? 0;
   const hoveredValue = hoveredIndex !== null ? sanitizedPoints[hoveredIndex] : null;
+  const chartPixelWidth = Math.max(320, sanitizedPoints.length * 28);
+  const needsScroll = chartPixelWidth > 320;
 
   return (
     <div
@@ -725,12 +742,19 @@ export const TrendLineChart: React.FC<TrendLineChartProps> = ({
 
       {hasData ? (
         <>
-          <div className="mt-4">
+          <div
+            className="mt-4"
+            style={{ overflowX: needsScroll ? 'auto' : 'visible' }}
+          >
             <svg
               viewBox="0 0 100 40"
               preserveAspectRatio="none"
-              className="h-32 w-full"
+              className="h-32"
               onMouseLeave={() => setHoveredIndex(null)}
+              style={{
+                width: chartPixelWidth,
+                minWidth: chartPixelWidth,
+              }}
             >
               <defs>
                 <linearGradient id="trendArea" x1="0%" y1="0%" x2="0%" y2="100%">

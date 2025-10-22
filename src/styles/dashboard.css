@@ -25,6 +25,104 @@
   background: #bfbfbf;
 }
 
+.custom-filters .ant-picker {
+  border-radius: 12px !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  transition: all 0.25s ease !important;
+}
+
+.custom-filters .ant-picker-range .ant-picker-active-bar {
+  background: #2563eb !important;
+}
+
+.custom-filters .ant-picker:hover,
+.custom-filters .ant-picker-focused {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+.custom-filters .ant-select-selector {
+  border-radius: 12px !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  transition: all 0.25s ease !important;
+}
+
+.custom-filters .ant-select:hover .ant-select-selector,
+.custom-filters .ant-select-focused .ant-select-selector,
+.custom-filters .ant-select-open .ant-select-selector {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+.custom-filters .ant-select-selection-item,
+.custom-filters .ant-select-selection-placeholder,
+.custom-filters .ant-select-selection-search-input {
+  color: #0f172a !important;
+}
+
+.custom-filters .ant-select-arrow {
+  color: #2563eb !important;
+}
+
+.custom-filters .ant-select-dropdown .ant-select-item-option-active,
+.custom-filters .ant-select-dropdown .ant-select-item-option-selected {
+  background: rgba(59, 130, 246, 0.12) !important;
+  color: #2563eb !important;
+}
+
+.custom-filters .ant-picker-range-separator .ant-picker-separator {
+  color: #3b82f6 !important;
+}
+
+.custom-filters .ant-picker-input > input {
+  color: #0f172a !important;
+}
+
+.custom-filters .ant-picker-suffix,
+.custom-filters .ant-picker-clear {
+  color: #2563eb !important;
+}
+
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner,
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-start .ant-picker-cell-inner,
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-end .ant-picker-cell-inner {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  color: #fff !important;
+}
+
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-today .ant-picker-cell-inner::before {
+  border-color: #60a5fa !important;
+}
+
+.custom-filter-dropdown .ant-picker-cell-in-view:hover .ant-picker-cell-inner {
+  background: rgba(59, 130, 246, 0.12) !important;
+  color: #2563eb !important;
+}
+
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-in-range::before,
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-start::before,
+.custom-filter-dropdown .ant-picker-cell-in-view.ant-picker-cell-range-end::before {
+  background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.custom-filter-dropdown .ant-picker-cell-inner::after {
+  border-color: #2563eb !important;
+}
+
+.custom-filter-dropdown .ant-picker-time-panel-column li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner,
+.custom-filter-dropdown .ant-picker-time-panel-column li.ant-picker-time-panel-cell-selected:hover .ant-picker-time-panel-cell-inner {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  color: #fff !important;
+}
+
+.custom-filter-dropdown .ant-btn-primary,
+.custom-filter-dropdown .ant-btn-primary:active,
+.custom-filter-dropdown .ant-btn-primary:focus,
+.custom-filter-dropdown .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border-color: #2563eb !important;
+}
+
 /* Dark theme scroll styles */
 [data-theme="dark"] .custom-scroll-container {
   scrollbar-color: #4a4a4a #2a2a2a;
