@@ -135,6 +135,7 @@ export type ReportTrips = {
   distance: number;
   spentFuel: number;
   duration: number;
+  engineHours?: number;
   startTime: string;
   startAddress: string;
   startLat: number;

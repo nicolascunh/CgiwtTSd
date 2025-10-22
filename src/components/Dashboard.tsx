@@ -53,6 +53,19 @@ import { useTheme } from '../contexts/ThemeContext';
 import { convertToKmh } from '../utils/speedUtils';
 import { LiveMap } from './LiveMap';
 import { GoogleMapsLiveMap } from './GoogleMapsLiveMap';
+import ExecutiveOverview, {
+  StatusIndicator,
+  TrendArrow,
+  Sparkline,
+  DonutChartProps,
+  VerticalBarChartProps,
+  StackedColumnChartProps,
+  TrendLineChartProps,
+  KpiCardProps,
+  StackedHorizontalBarsProps,
+  StackedHorizontalDatum,
+  StackedColumnDatum,
+} from './executive/ExecutiveOverview';
 import type { Device, Position, Event, ReportTrips, Driver, MaintenanceRecord } from '../types';
 import '../styles/dashboard.css';
 import '../styles/themes.css';
@@ -741,7 +754,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     activeTrips.forEach((trip) => {
       const distanceKm = (trip.distance || 0) / 1000;
       const durationRaw = trip.duration || 0;
-      const engineHours = durationRaw > 86400 ? durationRaw / 3600000 : durationRaw / 3600;
+      const engineRaw = trip.engineHours ?? durationRaw;
+      const engineHours = normalizeDurationHours(engineRaw);
       const device = deviceMap.get(trip.deviceId);
       const consumption = (device?.attributes as { consumption?: { kmPerL?: number } } | undefined)?.consumption?.kmPerL;
 
@@ -1196,6 +1210,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     });
   };
 
+  const formatDeltaLabel = (value: number, unit: string, fractionDigits = 1) => {
+    if (!Number.isFinite(value) || value === 0) {
+      return `±0${unit}`;
+    }
+    const absValue = Math.abs(value);
+    const formatted = absValue.toLocaleString(undefined, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    });
+    const sign = value >= 0 ? '+' : '-';
+    return `${sign}${formatted}${unit}`;
+  };
+
   const formatDuration = (hours: number) => {
     if (!Number.isFinite(hours) || hours <= 0) {
       return '00h 00m';
@@ -1231,6 +1258,747 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     const days = Math.floor(hours / 24);
     return `há ${days} d`;
   };
+
+  function normalizeDurationHours(duration: number): number {
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return 0;
+    }
+    const oneHourInMilliseconds = 1000 * 60 * 60;
+    const isMilliseconds = duration >= oneHourInMilliseconds;
+    return isMilliseconds ? duration / oneHourInMilliseconds : duration / 3600;
+  }
+
+  const getTimestamp = (iso?: string) => {
+    if (!iso) {
+      return NaN;
+    }
+    const value = new Date(iso).getTime();
+    return Number.isFinite(value) ? value : NaN;
+  };
+
+  const latestPositionByDevice = useMemo(() => {
+    const map = new Map<number, Position>();
+    positions.forEach((pos) => {
+      const rawId = Number(pos.deviceId);
+      if (!Number.isFinite(rawId)) {
+        return;
+      }
+      const timestamp = getTimestamp(pos.fixTime || pos.deviceTime || pos.serverTime);
+      if (!Number.isFinite(timestamp)) {
+        return;
+      }
+      const existing = map.get(rawId);
+      if (!existing) {
+        map.set(rawId, pos);
+        return;
+      }
+      const existingTime = getTimestamp(existing.fixTime || existing.deviceTime || existing.serverTime);
+      if (!Number.isFinite(existingTime) || timestamp >= existingTime) {
+        map.set(rawId, pos);
+      }
+    });
+    return map;
+  }, [positions]);
+
+  const toBooleanAttr = (value: unknown): boolean => {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes';
+    }
+    return false;
+  };
+
+  const activeTripsList = useMemo(
+    () => (isLoadingPartial ? partialTrips : trips),
+    [isLoadingPartial, partialTrips, trips],
+  );
+
+  const dailyTripStats = useMemo(() => {
+    const stats = new Map<string, { distanceKm: number; drivingHours: number; engineHours: number; fuelLiters: number }>();
+    activeTripsList.forEach((trip) => {
+      const baseTime = trip.startTime || trip.endTime;
+      if (!baseTime) {
+        return;
+      }
+      const key = dayjs(baseTime).format('YYYY-MM-DD');
+      const entry =
+        stats.get(key) ?? { distanceKm: 0, drivingHours: 0, engineHours: 0, fuelLiters: 0 };
+      entry.distanceKm += (trip.distance || 0) / 1000;
+      entry.drivingHours += normalizeDurationHours(trip.duration || 0);
+      entry.engineHours += normalizeDurationHours(trip.engineHours ?? trip.duration ?? 0);
+      if (trip.spentFuel && trip.spentFuel > 0) {
+        entry.fuelLiters += trip.spentFuel;
+      }
+      stats.set(key, entry);
+    });
+    return stats;
+  }, [activeTripsList]);
+
+  const selectedPeriodLabel = useMemo(() => {
+    if (!dateRange || !dateRange[0] || !dateRange[1]) {
+      return 'Período selecionado';
+    }
+    const [start, end] = dateRange;
+    const totalMinutes = Math.max(end.diff(start, 'minute'), 0);
+    if (totalMinutes <= 0) {
+      return 'Período selecionado';
+    }
+    const totalHours = totalMinutes / 60;
+    if (totalHours < 24) {
+      const roundedHours = Math.max(Math.round(totalHours), 1);
+      return roundedHours === 1 ? 'Última hora' : `Últimas ${roundedHours} horas`;
+    }
+    const totalDays = Math.max(Math.round(totalHours / 24), 1);
+    return totalDays === 1 ? 'Último dia' : `Últimos ${totalDays} dias`;
+  }, [dateRange]);
+
+  const sortedDailyKeys = useMemo(
+    () => Array.from(dailyTripStats.keys()).sort((a, b) => dayjs(a).valueOf() - dayjs(b).valueOf()),
+    [dailyTripStats],
+  );
+
+  const rangeKeys = useMemo(() => {
+    if (dateRange && dateRange[0] && dateRange[1]) {
+      const [start, end] = dateRange;
+      const startDay = start.startOf('day');
+      const endDay = end.endOf('day');
+      const keys = sortedDailyKeys.filter((key) => {
+        const day = dayjs(key);
+        return (day.isAfter(startDay, 'day') || day.isSame(startDay, 'day')) &&
+          (day.isBefore(endDay, 'day') || day.isSame(endDay, 'day'));
+      });
+      if (keys.length > 0) {
+        return keys;
+      }
+    }
+    const fallbackCount = Math.min(sortedDailyKeys.length, 7);
+    return sortedDailyKeys.slice(sortedDailyKeys.length - fallbackCount, sortedDailyKeys.length);
+  }, [sortedDailyKeys, dateRange]);
+
+  const dailyEventSummary = useMemo(() => {
+    const map = new Map<string, { stops: number; idle: number; overspeed: number; alerts: number; fuel: number }>();
+    events.forEach((event) => {
+      const baseTime = event.serverTime || (event.attributes?.serverTime as string | undefined);
+      if (!baseTime) {
+        return;
+      }
+      const key = dayjs(baseTime).format('YYYY-MM-DD');
+      const entry =
+        map.get(key) ?? { stops: 0, idle: 0, overspeed: 0, alerts: 0, fuel: 0 };
+      switch (event.type) {
+        case 'deviceStopped':
+          entry.stops += 1;
+          break;
+        case 'idle':
+          entry.idle += 1;
+          break;
+        case 'overspeed':
+          entry.overspeed += 1;
+          break;
+        case 'alarm':
+        case 'sos':
+        case 'sOS':
+          entry.alerts += 1;
+          break;
+        case 'fuelDrop':
+        case 'fuelTheft':
+          entry.fuel += 1;
+          break;
+        default:
+          break;
+      }
+      map.set(key, entry);
+    });
+    return map;
+  }, [events]);
+
+  const distanceSparklinePoints = useMemo(
+    () => rangeKeys.map((key) => dailyTripStats.get(key)?.distanceKm ?? 0),
+    [dailyTripStats, rangeKeys],
+  );
+
+  const drivingSparklinePoints = useMemo(
+    () => rangeKeys.map((key) => dailyTripStats.get(key)?.drivingHours ?? 0),
+    [dailyTripStats, rangeKeys],
+  );
+
+  const fuelSparklinePoints = useMemo(
+    () => rangeKeys.map((key) => dailyTripStats.get(key)?.fuelLiters ?? 0),
+    [dailyTripStats, rangeKeys],
+  );
+
+  const dailyEngineSeries = useMemo(
+    () => rangeKeys.map((key) => dailyTripStats.get(key)?.engineHours ?? 0),
+    [dailyTripStats, rangeKeys],
+  );
+
+  const dailyIdleSeries = useMemo(
+    () =>
+      dailyEngineSeries.map((engine, index) => {
+        const driving = drivingSparklinePoints[index] ?? 0;
+        const idle = engine - driving;
+        return idle > 0 ? idle : 0;
+      }),
+    [dailyEngineSeries, drivingSparklinePoints],
+  );
+
+  const engineSparklinePoints = dailyEngineSeries;
+
+  const distanceTrendLabels = useMemo(
+    () => rangeKeys.map((key) => dayjs(key).format('MMM D')),
+    [rangeKeys],
+  );
+
+  const FLEET_IDLE_FUEL_RATE = 0.8;
+
+  const fuelCost = estimatedFuel * fuelPrice;
+  const idleFuelLiters = totalIdleHours * FLEET_IDLE_FUEL_RATE;
+  const idleFuelCost = idleFuelLiters * fuelPrice;
+
+  const fuelCostSeries = useMemo(
+    () => fuelSparklinePoints.map((liters) => liters * fuelPrice),
+    [fuelSparklinePoints, fuelPrice],
+  );
+
+  const idleFuelCostSeries = useMemo(
+    () => dailyIdleSeries.map((hours) => hours * FLEET_IDLE_FUEL_RATE * fuelPrice),
+    [dailyIdleSeries, fuelPrice],
+  );
+
+  const weeklySampleCount = rangeKeys.length;
+  const weeklyLabel = weeklySampleCount === 1
+    ? 'Último dia'
+    : `Últimos ${weeklySampleCount || 1} dias`;
+  const previousLabel = weeklySampleCount === 1
+    ? 'Dia anterior'
+    : `Período anterior (${weeklySampleCount || 1} dias)`;
+  const weeklyKeys = rangeKeys;
+  const previousKeys = useMemo(() => {
+    if (weeklySampleCount === 0) return [];
+    const firstKey = weeklyKeys[0];
+    const firstIndex = sortedDailyKeys.findIndex((key) => key === firstKey);
+    if (firstIndex <= 0) {
+      return [];
+    }
+    const start = Math.max(0, firstIndex - weeklySampleCount);
+    return sortedDailyKeys.slice(start, firstIndex);
+  }, [weeklySampleCount, weeklyKeys, sortedDailyKeys]);
+
+  const sumDistanceForKeys = (keys: string[]) =>
+    keys.reduce((sum, key) => sum + (dailyTripStats.get(key)?.distanceKm ?? 0), 0);
+  const sumDrivingForKeys = (keys: string[]) =>
+    keys.reduce((sum, key) => sum + (dailyTripStats.get(key)?.drivingHours ?? 0), 0);
+  const sumEngineForKeys = (keys: string[]) =>
+    keys.reduce((sum, key) => sum + (dailyTripStats.get(key)?.engineHours ?? 0), 0);
+  const sumFuelForKeys = (keys: string[]) =>
+    keys.reduce((sum, key) => sum + (dailyTripStats.get(key)?.fuelLiters ?? 0), 0);
+  const sumIdleForKeys = (keys: string[]) =>
+    keys.reduce((sum, key) => {
+      const stats = dailyTripStats.get(key);
+      if (!stats) return sum;
+      const idle = (stats.engineHours ?? 0) - (stats.drivingHours ?? 0);
+      return idle > 0 ? sum + idle : sum;
+    }, 0);
+
+  const weeklyDistanceTotal = sumDistanceForKeys(weeklyKeys);
+  const previousDistanceTotal = previousKeys.length === weeklySampleCount ? sumDistanceForKeys(previousKeys) : null;
+
+  const weeklyDrivingTotal = sumDrivingForKeys(weeklyKeys);
+  const previousDrivingTotal = previousKeys.length === weeklySampleCount ? sumDrivingForKeys(previousKeys) : null;
+
+  const weeklyEngineTotal = sumEngineForKeys(weeklyKeys);
+  const previousEngineTotal = previousKeys.length === weeklySampleCount ? sumEngineForKeys(previousKeys) : null;
+
+  const weeklyIdleTotal = sumIdleForKeys(weeklyKeys);
+  const previousIdleTotal = previousKeys.length === weeklySampleCount ? sumIdleForKeys(previousKeys) : null;
+
+  const weeklyFuelTotal = sumFuelForKeys(weeklyKeys);
+  const previousFuelTotal = previousKeys.length === weeklySampleCount ? sumFuelForKeys(previousKeys) : null;
+
+  const weeklyFuelCostTotal = weeklyFuelTotal * fuelPrice;
+  const previousFuelCostTotal = previousFuelTotal !== null ? previousFuelTotal * fuelPrice : null;
+
+  const weeklyIdleCostTotal = weeklyIdleTotal * FLEET_IDLE_FUEL_RATE * fuelPrice;
+  const previousIdleCostTotal = previousIdleTotal !== null ? previousIdleTotal * FLEET_IDLE_FUEL_RATE * fuelPrice : null;
+
+  const connectionChart = useMemo<DonutChartProps>(() => {
+    let online = 0;
+    let offline = 0;
+    let updating = 0;
+    let other = 0;
+    const now = Date.now();
+    const staleThresholdMs = 30 * 60 * 1000;
+
+    effectiveDevices.forEach((device) => {
+      if (device.disabled) {
+        other += 1;
+        return;
+      }
+
+      const metricsPosition = deviceMetrics.get(device.id)?.lastPosition;
+      const fallbackPosition = latestPositionByDevice.get(device.id);
+      const referencePosition = metricsPosition || fallbackPosition;
+      const lastTimestamp = getTimestamp(
+        referencePosition?.fixTime ||
+          referencePosition?.deviceTime ||
+          referencePosition?.serverTime ||
+          device.lastUpdate,
+      );
+
+      if (device.status !== 'online') {
+        offline += 1;
+        return;
+      }
+
+      if (!Number.isFinite(lastTimestamp)) {
+        other += 1;
+        return;
+      }
+
+      if (now - lastTimestamp > staleThresholdMs) {
+        updating += 1;
+      } else {
+        online += 1;
+      }
+    });
+
+    const total = online + offline + updating + other;
+    const offlineRatio = total > 0 ? offline / total : 0;
+    let tone: 'success' | 'warning' | 'danger' = 'success';
+    let label = 'Saudável';
+
+    if (offlineRatio >= 0.3) {
+      tone = 'danger';
+      label = 'Risco alto';
+    } else if (offlineRatio >= 0.1) {
+      tone = 'warning';
+      label = 'Atenção';
+    }
+
+    return {
+      title: 'Status de conexão',
+      subtitle: total > 0 ? `Total monitorado: ${formatNumber(total)} dispositivos` : 'Nenhum dispositivo ativo',
+      centerPrimary: formatNumber(total),
+      centerSecondary: 'Dispositivos',
+      segments: [
+        { label: 'Online', value: online, color: '#22c55e', hint: `${formatNumber(online)} veículos` },
+        { label: 'Offline', value: offline, color: '#f97316', hint: `${formatNumber(offline)} veículos` },
+        { label: 'Atualizando', value: updating, color: '#facc15', hint: `${formatNumber(updating)} veículos` },
+        { label: 'Outros', value: other, color: '#94a3b8', hint: `${formatNumber(other)} veículos` },
+      ],
+      status: <StatusIndicator label={label} tone={tone} />,
+      valueFormatter: (segment, totalValue) =>
+        totalValue > 0
+          ? `${formatNumber(segment.value)} (${((segment.value / totalValue) * 100).toFixed(1)}%)`
+          : formatNumber(segment.value),
+    };
+  }, [effectiveDevices, deviceMetrics, latestPositionByDevice, formatNumber]);
+
+  const movementChart = useMemo<DonutChartProps>(() => {
+    let moving = 0;
+    let parked = 0;
+    let excessiveIdling = 0;
+
+    effectiveDevices.forEach((device) => {
+      if (device.disabled) {
+        return;
+      }
+      const position = latestPositionByDevice.get(device.id);
+      if (!position) {
+        parked += 1;
+        return;
+      }
+
+      const speedKmh = convertToKmh(position.speed ?? 0);
+      const attrs = position.attributes as Record<string, unknown> | undefined;
+      const ignition = attrs ? toBooleanAttr((attrs as { ignition?: unknown }).ignition) : false;
+      const motion = attrs ? toBooleanAttr((attrs as { motion?: unknown }).motion) : false;
+
+      if (speedKmh > 2 || motion) {
+        moving += 1;
+      } else if (ignition) {
+        excessiveIdling += 1;
+      } else {
+        parked += 1;
+      }
+    });
+
+    const total = moving + parked + excessiveIdling;
+
+    return {
+      title: 'Status de movimentação',
+      subtitle: total > 0 ? `${formatNumber(total)} veículos monitorados` : undefined,
+      centerPrimary: formatNumber(total),
+      centerSecondary: 'Veículos',
+      segments: [
+        { label: 'Em movimento', value: moving, color: '#22c55e', hint: `${formatNumber(moving)} veículos` },
+        { label: 'Parados', value: parked, color: '#3b82f6', hint: `${formatNumber(parked)} veículos` },
+        { label: 'Marcha lenta excessiva', value: excessiveIdling, color: '#f97316', hint: `${formatNumber(excessiveIdling)} veículos` },
+      ],
+      status: <StatusIndicator label="Atualização em tempo real" tone="info" />,
+      valueFormatter: (segment, totalValue) =>
+        totalValue > 0
+          ? `${formatNumber(segment.value)} (${((segment.value / totalValue) * 100).toFixed(1)}%)`
+          : formatNumber(segment.value),
+    };
+  }, [effectiveDevices, latestPositionByDevice, formatNumber]);
+
+  const speedViolationsChart = useMemo<DonutChartProps>(() => {
+    const movementEventTypes = new Set(['overspeed', 'deviceMoving', 'deviceStopped', 'ignitionOn', 'ignitionOff']);
+    const overspeedCount = events.filter((event) => event.type === 'overspeed').length;
+    const movementEvents = events.filter((event) => movementEventTypes.has(event.type)).length;
+    const withinLimit = Math.max(movementEvents - overspeedCount, 0);
+    const total = withinLimit + overspeedCount;
+
+    return {
+      title: 'Violações de velocidade',
+      subtitle: total > 0 ? weeklyLabel : 'Nenhum evento registrado',
+      centerPrimary: formatNumber(overspeedCount),
+      centerSecondary: 'Alertas',
+      segments: [
+        { label: 'Dentro do limite', value: withinLimit, color: '#22c55e', hint: `${formatNumber(withinLimit)} registros` },
+        { label: 'Acima do limite', value: overspeedCount, color: '#ef4444', hint: `${formatNumber(overspeedCount)} alertas` },
+      ],
+      valueFormatter: (segment, totalValue) =>
+        totalValue > 0
+          ? `${formatNumber(segment.value)} (${((segment.value / totalValue) * 100).toFixed(1)}%)`
+          : formatNumber(segment.value),
+    };
+  }, [events, formatNumber, weeklyLabel]);
+
+  const tripDurationChart = useMemo<StackedColumnChartProps>(() => {
+    const keys = rangeKeys.slice(-4);
+    const data: StackedColumnDatum[] = keys.map((key) => {
+      const stats = dailyTripStats.get(key);
+      const index = rangeKeys.indexOf(key);
+      const driving = stats?.drivingHours ?? 0;
+      const idle = index >= 0 ? dailyIdleSeries[index] ?? 0 : 0;
+      const eventsSummary = dailyEventSummary.get(key);
+      const parkedFromEvents = eventsSummary ? eventsSummary.stops * 0.25 : 0;
+      const parked = parkedFromEvents > 0 ? parkedFromEvents : Math.max(driving * 0.3, 0);
+      return {
+        label: dayjs(key).format('MMM D'),
+        segments: [
+          { label: 'Parado', value: Number(parked.toFixed(2)), color: '#3b82f6' },
+          { label: 'Marcha lenta', value: Number(idle.toFixed(2)), color: '#facc15' },
+          { label: 'Em movimento', value: Number(driving.toFixed(2)), color: '#22c55e' },
+        ],
+      };
+    });
+
+    return {
+      title: 'Duração das viagens',
+      subtitle: keys.length ? weeklyLabel : undefined,
+      data,
+    };
+  }, [dailyTripStats, rangeKeys, dailyIdleSeries, dailyEventSummary, weeklyLabel]);
+
+  const distanceTrendChart = useMemo<TrendLineChartProps>(() => {
+    const points = rangeKeys.map((key) => {
+      const stats = dailyTripStats.get(key);
+      return stats ? Number(stats.distanceKm.toFixed(2)) : 0;
+    });
+
+    return {
+      title: 'Distância total',
+      subtitle: weeklyLabel,
+      points,
+      labels: distanceTrendLabels,
+      accentColor: '#38bdf8',
+      formatter: (value) => `${formatNumber(value, 1)} km`,
+      yLabel: 'km',
+    };
+  }, [dailyTripStats, rangeKeys, distanceTrendLabels, formatNumber, weeklyLabel]);
+
+  const driverByDeviceId = useMemo(() => {
+    const map = new Map<number, string>();
+    drivers.forEach((driver) => {
+      if (typeof driver.deviceId === 'number') {
+        map.set(driver.deviceId, driver.name);
+      }
+    });
+    return map;
+  }, [drivers]);
+
+  const driverEventsChart = useMemo<StackedHorizontalBarsProps>(() => {
+    const summary = new Map<string, { speeding: number; fuel: number; harsh: number; sos: number }>();
+
+    events.forEach((event) => {
+      const deviceId = Number(event.deviceId);
+      if (!Number.isFinite(deviceId)) {
+        return;
+      }
+      const label =
+        driverByDeviceId.get(deviceId) ||
+        deviceMap.get(deviceId)?.name ||
+        `Device #${deviceId}`;
+      const entry =
+        summary.get(label) ?? { speeding: 0, fuel: 0, harsh: 0, sos: 0 };
+
+      switch (event.type) {
+        case 'overspeed':
+          entry.speeding += 1;
+          break;
+        case 'fuelDrop':
+        case 'fuelTheft':
+          entry.fuel += 1;
+          break;
+        case 'harshBraking':
+        case 'harshAcceleration':
+        case 'harshCornering':
+          entry.harsh += 1;
+          break;
+        case 'alarm':
+        case 'sos':
+        case 'sOS':
+          entry.sos += 1;
+          break;
+        default:
+          break;
+      }
+
+      summary.set(label, entry);
+    });
+
+    const rows: StackedHorizontalDatum[] = Array.from(summary.entries())
+      .map(([label, counts]) => ({
+        label,
+        segments: [
+          { label: 'Excesso de velocidade', value: counts.speeding, color: '#ef4444' },
+          { label: 'Drenagem de combustível', value: counts.fuel, color: '#f97316' },
+          { label: 'Condução severa', value: counts.harsh, color: '#facc15' },
+          { label: 'SOS/Alertas', value: counts.sos, color: '#22c55e' },
+        ],
+      }))
+      .filter((item) => item.segments.some((segment) => segment.value > 0))
+      .sort((a, b) => {
+        const sum = (segments: { value: number }[]) =>
+          segments.reduce((acc, segment) => acc + segment.value, 0);
+        return sum(b.segments) - sum(a.segments);
+      })
+      .slice(0, 5);
+
+    return {
+      title: 'Top 5 motoristas por eventos',
+      subtitle: rows.length ? 'Eventos categorizados por condutor' : undefined,
+      data: rows,
+    };
+  }, [events, driverByDeviceId, deviceMap]);
+
+  const fuelDrainsChart = useMemo<VerticalBarChartProps>(() => {
+    const data = rangeKeys.map((key) => {
+      const stats = dailyTripStats.get(key);
+      return {
+        label: dayjs(key).format('MMM D'),
+        value: Number(((stats?.fuelLiters ?? 0)).toFixed(2)),
+        color: '#3b82f6',
+      };
+    });
+
+    const maxValue = Math.max(...data.map((item) => item.value), 1);
+
+    return {
+      title: 'Consumo de combustível',
+      subtitle: data.length ? weeklyLabel : undefined,
+      data,
+      maxValue: maxValue > 0 ? maxValue : 1,
+      showValue: false,
+    };
+  }, [dailyTripStats, rangeKeys, weeklyLabel]);
+
+  const kpiCards = useMemo<KpiCardProps[]>(() => {
+    const distanceDelta = previousDistanceTotal !== null ? weeklyDistanceTotal - previousDistanceTotal : 0;
+    const engineDelta = previousEngineTotal !== null ? weeklyEngineTotal - previousEngineTotal : 0;
+    const drivingDelta = previousDrivingTotal !== null ? weeklyDrivingTotal - previousDrivingTotal : 0;
+    const fuelDelta = previousFuelTotal !== null ? weeklyFuelTotal - previousFuelTotal : 0;
+    const fuelCostDelta = previousFuelCostTotal !== null ? weeklyFuelCostTotal - previousFuelCostTotal : 0;
+    const idleCostDelta = previousIdleCostTotal !== null ? weeklyIdleCostTotal - previousIdleCostTotal : 0;
+
+    const distancePercent = previousDistanceTotal && previousDistanceTotal !== 0
+      ? (distanceDelta / previousDistanceTotal) * 100
+      : null;
+    const enginePercent = previousEngineTotal && previousEngineTotal !== 0
+      ? (engineDelta / previousEngineTotal) * 100
+      : null;
+    const drivingPercent = previousDrivingTotal && previousDrivingTotal !== 0
+      ? (drivingDelta / previousDrivingTotal) * 100
+      : null;
+    const fuelPercent = previousFuelTotal && previousFuelTotal !== 0
+      ? (fuelDelta / previousFuelTotal) * 100
+      : null;
+    const fuelCostPercent = previousFuelCostTotal && previousFuelCostTotal !== 0
+      ? (fuelCostDelta / previousFuelCostTotal) * 100
+      : null;
+    const idleCostPercent = previousIdleCostTotal && previousIdleCostTotal !== 0
+      ? (idleCostDelta / previousIdleCostTotal) * 100
+      : null;
+
+    const distanceComparisonDelta = previousDistanceTotal !== null
+      ? distancePercent !== null
+        ? `${formatDeltaLabel(distanceDelta, ' km')} (${formatDeltaLabel(distancePercent, '%')})`
+        : formatDeltaLabel(distanceDelta, ' km')
+      : undefined;
+    const engineComparisonDelta = previousEngineTotal !== null
+      ? enginePercent !== null
+        ? `${formatDeltaLabel(engineDelta, ' h')} (${formatDeltaLabel(enginePercent, '%')})`
+        : formatDeltaLabel(engineDelta, ' h')
+      : undefined;
+    const drivingComparisonDelta = previousDrivingTotal !== null
+      ? drivingPercent !== null
+        ? `${formatDeltaLabel(drivingDelta, ' h')} (${formatDeltaLabel(drivingPercent, '%')})`
+        : formatDeltaLabel(drivingDelta, ' h')
+      : undefined;
+    const fuelComparisonDelta = previousFuelTotal !== null
+      ? fuelPercent !== null
+        ? `${formatDeltaLabel(fuelDelta, ' L')} (${formatDeltaLabel(fuelPercent, '%')})`
+        : formatDeltaLabel(fuelDelta, ' L')
+      : undefined;
+    const fuelCostComparisonDelta = previousFuelCostTotal !== null
+      ? fuelCostPercent !== null
+        ? `${formatDeltaLabel(fuelCostDelta, ' R$')} (${formatDeltaLabel(fuelCostPercent, '%')})`
+        : formatDeltaLabel(fuelCostDelta, ' R$')
+      : undefined;
+    const idleCostComparisonDelta = previousIdleCostTotal !== null
+      ? idleCostPercent !== null
+        ? `${formatDeltaLabel(idleCostDelta, ' R$')} (${formatDeltaLabel(idleCostPercent, '%')})`
+        : formatDeltaLabel(idleCostDelta, ' R$')
+      : undefined;
+
+    return [
+      {
+        title: 'Distância total (km)',
+        value: formatNumber(weeklyDistanceTotal, 1),
+        helper: weeklyLabel,
+        comparisonLabel: previousDistanceTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousDistanceTotal !== null ? `${formatNumber(previousDistanceTotal, 1)} km` : undefined,
+        comparisonTrend:
+          previousDistanceTotal !== null && distanceDelta !== 0 ? (
+            <TrendArrow
+              value={Number(distanceDelta.toFixed(1))}
+              suffix=" km"
+              direction={distanceDelta >= 0 ? 'up' : 'down'}
+            />
+          ) : undefined,
+        comparisonDelta: distanceComparisonDelta,
+        miniChart: <Sparkline points={distanceSparklinePoints} color="#3b82f6" />,
+      },
+      {
+        title: 'Horas de motor',
+        value: formatNumber(weeklyEngineTotal, 1),
+        helper: weeklyLabel,
+        comparisonLabel: previousEngineTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousEngineTotal !== null ? `${formatNumber(previousEngineTotal, 1)} h` : undefined,
+        comparisonTrend:
+          previousEngineTotal !== null && engineDelta !== 0 ? (
+            <TrendArrow
+              value={Number(engineDelta.toFixed(1))}
+              suffix=" h"
+              direction={engineDelta >= 0 ? 'up' : 'down'}
+            />
+          ) : undefined,
+        comparisonDelta: engineComparisonDelta,
+        miniChart: <Sparkline points={engineSparklinePoints} color="#8b5cf6" />,
+      },
+      {
+        title: 'Tempo de condução (h)',
+        value: formatNumber(weeklyDrivingTotal, 1),
+        helper: weeklyLabel,
+        comparisonLabel: previousDrivingTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousDrivingTotal !== null ? `${formatNumber(previousDrivingTotal, 1)} h` : undefined,
+        comparisonTrend:
+          previousDrivingTotal !== null && drivingDelta !== 0 ? (
+            <TrendArrow
+              value={Number(drivingDelta.toFixed(1))}
+              suffix=" h"
+              direction={drivingDelta >= 0 ? 'up' : 'down'}
+            />
+          ) : undefined,
+        comparisonDelta: drivingComparisonDelta,
+        miniChart: <Sparkline points={drivingSparklinePoints} color="#22c55e" />,
+      },
+      {
+        title: 'Combustível consumido (L)',
+        value: formatNumber(weeklyFuelTotal, 1),
+        helper: weeklyLabel,
+        comparisonLabel: previousFuelTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousFuelTotal !== null ? `${formatNumber(previousFuelTotal, 1)} L` : undefined,
+        comparisonTrend:
+          previousFuelTotal !== null && fuelDelta !== 0 ? (
+            <TrendArrow
+              value={Number(fuelDelta.toFixed(1))}
+              suffix=" L"
+              direction={fuelDelta >= 0 ? 'up' : 'down'}
+            />
+          ) : undefined,
+        comparisonDelta: fuelComparisonDelta,
+        miniChart: <Sparkline points={fuelSparklinePoints} color="#f97316" />,
+      },
+      {
+        title: 'Custo de combustível (R$)',
+        value: `R$ ${formatNumber(weeklyFuelCostTotal, 2)}`,
+        helper: weeklyLabel,
+        comparisonLabel: previousFuelCostTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousFuelCostTotal !== null ? `R$ ${formatNumber(previousFuelCostTotal, 2)}` : undefined,
+        comparisonTrend:
+          previousFuelCostTotal !== null && fuelCostDelta !== 0 ? (
+            <TrendArrow
+              value={Number(fuelCostDelta.toFixed(2))}
+              direction={fuelCostDelta >= 0 ? 'up' : 'down'}
+              tone={fuelCostDelta >= 0 ? 'danger' : 'success'}
+              suffix=" R$"
+            />
+          ) : undefined,
+        comparisonDelta: fuelCostComparisonDelta,
+        miniChart: <Sparkline points={fuelCostSeries} color="#0ea5e9" />,
+      },
+      {
+        title: 'Custo em marcha lenta (R$)',
+        value: `R$ ${formatNumber(weeklyIdleCostTotal, 2)}`,
+        helper: weeklyLabel,
+        comparisonLabel: previousIdleCostTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousIdleCostTotal !== null ? `R$ ${formatNumber(previousIdleCostTotal, 2)}` : undefined,
+        comparisonTrend:
+          previousIdleCostTotal !== null && idleCostDelta !== 0 ? (
+            <TrendArrow
+              value={Number(idleCostDelta.toFixed(2))}
+              direction={idleCostDelta >= 0 ? 'up' : 'down'}
+              tone={idleCostDelta >= 0 ? 'danger' : 'success'}
+              suffix=" R$"
+            />
+          ) : undefined,
+        comparisonDelta: idleCostComparisonDelta,
+        miniChart: <Sparkline points={idleFuelCostSeries} color="#ef4444" />,
+      },
+    ];
+  }, [
+    distanceSparklinePoints,
+    engineSparklinePoints,
+    drivingSparklinePoints,
+    fuelSparklinePoints,
+    fuelCostSeries,
+    idleFuelCostSeries,
+    weeklyDistanceTotal,
+    weeklyEngineTotal,
+    weeklyDrivingTotal,
+    weeklyFuelTotal,
+    weeklyFuelCostTotal,
+    weeklyIdleCostTotal,
+    weeklyLabel,
+    previousLabel,
+    previousDistanceTotal,
+    previousEngineTotal,
+    previousDrivingTotal,
+    previousFuelTotal,
+    previousFuelCostTotal,
+    previousIdleCostTotal,
+    formatNumber,
+  ]);
 
   const toNumeric = (value: unknown): number | undefined => {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -1903,130 +2671,192 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             <div
               style={{
                 display: 'flex',
-                flexDirection: isMobile ? 'column' : 'row',
-                alignItems: isMobile ? 'flex-start' : 'center',
-                justifyContent: 'space-between',
-                gap: isMobile ? 12 : 16,
-                marginBottom: isMobile ? '16px' : '24px',
+                flexDirection: 'column',
+                gap: isMobile ? 16 : 20,
+                marginBottom: isMobile ? '16px' : '32px',
               }}
             >
-              <Title level={2} style={{ margin: 0, color: '#1a1a2e' }}>
-                Dashboard Executivo - Gestão de Frotas
-              </Title>
-            </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  alignItems: isMobile ? 'flex-start' : 'center',
+                  justifyContent: 'space-between',
+                  gap: isMobile ? 12 : 16,
+                }}
+              >
+                <div>
+                  <Title level={2} style={{ margin: 0, color: '#0f172a' }}>
+                    Painel Executivo
+                  </Title>
+                  <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500, display: 'inline-block', marginTop: '8px' }}>
+                    Visão geral da frota em tempo real
+                  </span>
+                </div>
+                <Button
+                  type="primary"
+                  icon={<SettingOutlined />}
+                  style={{
+                    height: '44px',
+                    paddingInline: '20px',
+                    borderRadius: '9999px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 45%, #0284c7 100%)',
+                    boxShadow: '0 8px 20px rgba(14, 165, 233, 0.25)',
+                  }}
+                >
+                  Personalizar painel
+                </Button>
+              </div>
 
-            {/* Campos de Busca e Filtro */}
-            <div style={{ marginBottom: '24px' }}>
-              {/* Labels */}
-              <Row gutter={[16, 0]} style={{ marginBottom: '8px' }}>
-                <Col xs={24} md={10}>
-                  <Text strong style={{ color: '#374151', fontSize: '14px', textTransform: 'uppercase' }}>
-                    PLACAS
-                  </Text>
-                </Col>
-                <Col xs={24} md={10}>
-                  <Text strong style={{ color: '#374151', fontSize: '14px', textTransform: 'uppercase' }}>
-                    PERÍODO
-                  </Text>
-                </Col>
-                <Col xs={24} md={4}>
-                  {/* Espaço vazio para manter alinhamento */}
-                </Col>
-              </Row>
-              
-              {/* Campos na mesma linha */}
-              <Row gutter={[16, 0]} align="middle">
-                <Col xs={24} md={10}>
-                  <AutoComplete
-                    value={searchPlates}
-                    onChange={setSearchPlates}
-                    onSelect={(value) => {
-                      if (value && !selectedPlates.includes(value)) {
-                        const nextPlates = [...selectedPlates, value];
-                        setSelectedPlates(nextPlates);
-                        setSearchPlates('');
-                        if (filteredDeviceIds !== null) {
-                          void runSearch(nextPlates);
+              <div
+                style={{
+                  padding: isMobile ? '12px' : '20px',
+                  borderRadius: '18px',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  background: 'linear-gradient(135deg, rgba(246, 250, 255, 0.8) 0%, rgba(235, 244, 255, 0.9) 100%)',
+                  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+                }}
+              >
+                <Row gutter={[16, 0]} style={{ marginBottom: '8px' }}>
+                  <Col xs={24} md={10}>
+                    <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Placas
+                    </Text>
+                  </Col>
+                  <Col xs={24} md={10}>
+                    <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                      Período
+                    </Text>
+                  </Col>
+                  <Col xs={24} md={4} />
+                </Row>
+
+                <Row gutter={[16, 0]} align="middle">
+                  <Col xs={24} md={10}>
+                    <AutoComplete
+                      value={searchPlates}
+                      onChange={setSearchPlates}
+                      onSelect={(value) => {
+                        if (value && !selectedPlates.includes(value)) {
+                          const nextPlates = [...selectedPlates, value];
+                          setSelectedPlates(nextPlates);
+                          setSearchPlates('');
+                          if (filteredDeviceIds !== null) {
+                            void runSearch(nextPlates);
+                          }
                         }
+                      }}
+                      options={plateOptions}
+                      placeholder="Todas ou selecionar as desejadas"
+                      style={{ width: '100%', height: '40px' }}
+                      filterOption={(inputValue, option) =>
+                        option?.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
                       }
-                    }}
-                    options={plateOptions}
-                    placeholder="Todas ou selecionar as desejadas"
-                    style={{ width: '100%', height: '40px' }}
-                    filterOption={(inputValue, option) =>
-                      option?.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
-                    }
-                  />
-                </Col>
-                <Col xs={24} md={10}>
-              <RangePicker
-                value={dateRange}
-                onChange={handleDateRangeChange}
-                allowClear={false}
-                showTime={{ format: 'HH:mm' }}
-                format="DD/MM/YYYY HH:mm"
-                    style={{ width: '100%', height: '40px' }}
-                disabledDate={(current) => !!current && current > dayjs()}
-                presets={[
-                  { label: 'Últimas 24h', value: [dayjs().subtract(24, 'hour'), dayjs()] },
-                  { label: 'Últimos 7 dias', value: [dayjs().subtract(7, 'day').startOf('day'), dayjs()] },
-                  { label: 'Este mês', value: [dayjs().startOf('month'), dayjs()] },
-                ]}
-              />
-                </Col>
-                <Col xs={24} md={4}>
-                  <Button
-                    type="primary"
-                    onClick={handleSearch}
-                    loading={isSearching}
-                    disabled={isSearching}
-                    style={{ 
-                      width: '100%', 
-                      height: '40px',
-                      background: isSearching 
-                        ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
-                        : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
-                      border: 'none',
-                      boxShadow: isSearching 
-                        ? '0 2px 8px rgba(148, 163, 184, 0.3)'
-                        : '0 4px 12px rgba(96, 165, 250, 0.3)',
-                      transition: 'all 0.3s ease'
-                    }}
-                    icon={!isSearching ? <SearchOutlined /> : undefined}
-                  >
-                    {isSearching ? (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Spin size="small" />
-                        Buscando...
-                      </span>
-                    ) : (
-                      'Buscar'
+                    />
+                  </Col>
+                  <Col xs={24} md={10}>
+                <RangePicker
+                  value={dateRange}
+                  onChange={handleDateRangeChange}
+                  allowClear={false}
+                  showTime={{ format: 'HH:mm' }}
+                  format="DD/MM/YYYY HH:mm"
+                      style={{ width: '100%', height: '40px' }}
+                  disabledDate={(current) => !!current && current > dayjs()}
+                  presets={[
+                    { label: 'Últimas 24h', value: [dayjs().subtract(24, 'hour'), dayjs()] },
+                    { label: 'Últimos 7 dias', value: [dayjs().subtract(7, 'day').startOf('day'), dayjs()] },
+                    { label: 'Este mês', value: [dayjs().startOf('month'), dayjs()] },
+                  ]}
+                />
+                  </Col>
+                  <Col xs={24} md={4}>
+                    <Button
+                      type="primary"
+                      onClick={handleSearch}
+                      loading={isSearching}
+                      disabled={isSearching}
+                      style={{ 
+                        width: '100%', 
+                        height: '40px',
+                        background: isSearching 
+                          ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
+                          : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
+                        border: 'none',
+                        boxShadow: isSearching 
+                          ? '0 2px 8px rgba(148, 163, 184, 0.3)'
+                          : '0 4px 12px rgba(96, 165, 250, 0.3)',
+                        transition: 'all 0.3s ease'
+                      }}
+                      icon={!isSearching ? <SearchOutlined /> : undefined}
+                    >
+                      {isSearching ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Spin size="small" />
+                          Buscando...
+                        </span>
+                      ) : (
+                        'Buscar'
                     )}
                   </Button>
                 </Col>
-              </Row>
-              
-              {/* Tags das placas selecionadas */}
-              {selectedPlates.length > 0 && (
-                <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                  {selectedPlates.map((plate, index) => (
-                    <Tag
-                      key={index}
-                      closable
-                      onClose={() => {
-                        const nextPlates = selectedPlates.filter((_, i) => i !== index);
-                        setSelectedPlates(nextPlates);
-                        if (filteredDeviceIds !== null) {
-                          void runSearch(nextPlates);
-                        }
-                      }}
-                      color="blue"
-                    >
-                      {plate}
-                    </Tag>
-                  ))}
-                </div>
-              )}
+                  <Col xs={24} md={4}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                        Preço combustível
+                      </Text>
+                      <InputNumber
+                        value={fuelPrice}
+                        min={0}
+                        step={0.1}
+                        style={{ width: '100%' }}
+                        formatter={(value) => `R$ ${value ?? 0}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                        parser={(value) => Number(value?.replace(/[R$\s.]/g, '').replace(',', '.'))}
+                        onChange={(value) => {
+                          if (typeof value === 'number' && !Number.isNaN(value)) {
+                            setFuelPrice(value);
+                          }
+                        }}
+                      />
+                    </div>
+                  </Col>
+                </Row>
+
+                {selectedPlates.length > 0 && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {selectedPlates.map((plate, index) => (
+                      <Tag
+                        key={index}
+                        closable
+                        onClose={() => {
+                          const nextPlates = selectedPlates.filter((_, i) => i !== index);
+                          setSelectedPlates(nextPlates);
+                          if (filteredDeviceIds !== null) {
+                            void runSearch(nextPlates);
+                          }
+                        }}
+                        color="blue"
+                      >
+                        {plate}
+                      </Tag>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: isMobile ? '16px' : '32px' }}>
+              <ExecutiveOverview
+                connection={connectionChart}
+                movement={movementChart}
+                kpis={kpiCards}
+                speedViolations={speedViolationsChart}
+                tripDuration={tripDurationChart}
+                distanceTrend={distanceTrendChart}
+                driverEvents={driverEventsChart}
+                fuelDrains={fuelDrainsChart}
+              />
             </div>
 
             {/* Feedback da Busca */}
