@@ -26,9 +26,10 @@
 }
 
 .custom-filters .ant-picker {
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   border: 1px solid rgba(59, 130, 246, 0.35) !important;
   transition: all 0.25s ease !important;
+  height: 40px !important;
 }
 
 .custom-filters .ant-picker-range .ant-picker-active-bar {
@@ -42,9 +43,12 @@
 }
 
 .custom-filters .ant-select-selector {
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   border: 1px solid rgba(59, 130, 246, 0.35) !important;
   transition: all 0.25s ease !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
 .custom-filters .ant-select:hover .ant-select-selector,
@@ -64,10 +68,105 @@
   color: #2563eb !important;
 }
 
-.custom-filters .ant-select-dropdown .ant-select-item-option-active,
+/* Centralizar verticalmente o valor do campo de combustível */
+.fuel-price-input {
+  display: flex !important;
+  align-items: center !important;
+  border-radius: 8px !important;
+  height: 40px !important;
+  border: 1px solid rgba(59, 130, 246, 0.35) !important;
+  transition: all 0.25s ease !important;
+}
+
+.fuel-price-input input {
+  text-align: center !important;
+  line-height: 40px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.fuel-price-input .ant-input-number-input-wrap {
+  display: flex !important;
+  align-items: center !important;
+  height: 100% !important;
+}
+
+.fuel-price-input .ant-input-number-handler-wrap {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Remover cor roxa do hover - usar azul */
+.fuel-price-input:hover {
+  border-color: #1890ff !important;
+}
+
+.fuel-price-input:focus,
+.fuel-price-input:focus-within,
+.fuel-price-input.ant-input-number-focused {
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+}
+
+.fuel-price-input .ant-input-number-handler:hover {
+  background: rgba(24, 144, 255, 0.08) !important;
+}
+
+.fuel-price-input .ant-input-number-handler-up:hover,
+.fuel-price-input .ant-input-number-handler-down:hover {
+  color: #1890ff !important;
+}
+
+.custom-filters .ant-select-dropdown .ant-select-item-option-active {
+  background: rgba(24, 144, 255, 0.08) !important;
+  color: #1890ff !important;
+}
+
 .custom-filters .ant-select-dropdown .ant-select-item-option-selected {
-  background: rgba(59, 130, 246, 0.12) !important;
-  color: #2563eb !important;
+  background: rgba(24, 144, 255, 0.12) !important;
+  color: #1890ff !important;
+}
+
+/* Garantir fundo azul para itens selecionados (não roxo) - máxima prioridade */
+.ant-select-dropdown .ant-select-item-option-selected,
+.ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled),
+div.ant-select-dropdown .ant-select-item-option-selected {
+  background: rgba(24, 144, 255, 0.12) !important;
+  background-color: rgba(24, 144, 255, 0.12) !important;
+  color: #1890ff !important;
+}
+
+.ant-select-dropdown .ant-select-item-option-selected:hover,
+.ant-select-dropdown .ant-select-item-option-selected:active {
+  background: rgba(24, 144, 255, 0.2) !important;
+  background-color: rgba(24, 144, 255, 0.2) !important;
+  color: #1890ff !important;
+}
+
+/* Marcadores azuis para itens selecionados no Select */
+.ant-select-dropdown .ant-select-item-option-selected .ant-select-item-option-state {
+  color: #1890ff !important;
+}
+
+.ant-select-item-option-selected::after {
+  color: #1890ff !important;
+}
+
+/* Ícone de check azul nos itens selecionados */
+.ant-select-item-option-selected .anticon-check {
+  color: #1890ff !important;
+}
+
+/* Checkbox azul para "Todas as placas" */
+.ant-checkbox-checked .ant-checkbox-inner {
+  background-color: #1890ff !important;
+  border-color: #1890ff !important;
+}
+
+.ant-checkbox-wrapper:hover .ant-checkbox-inner,
+.ant-checkbox:hover .ant-checkbox-inner,
+.ant-checkbox-input:focus + .ant-checkbox-inner {
+  border-color: #1890ff !important;
 }
 
 .custom-filters .ant-picker-range-separator .ant-picker-separator {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { Layout, Menu, Typography, Card, Button, Tag, Space, Input, InputNumber, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge, Tooltip, Select, Checkbox } from 'antd';
+import { Layout, Menu, Typography, Card, Button, Tag, Space, Input, InputNumber, Row, Col, Tabs, Divider, Spin, Alert, Modal, Statistic, Progress, Empty, List, DatePicker, AutoComplete, Badge } from 'antd';
 import type { MenuProps } from 'antd';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
@@ -53,7 +53,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { convertToKmh } from '../utils/speedUtils';
 import { LiveMap } from './LiveMap';
 import { GoogleMapsLiveMap } from './GoogleMapsLiveMap';
-import { ShadcnSidebar } from './ShadcnSidebar';
+import { ModernSidebar } from './ModernSidebar';
 import ExecutiveOverview, {
   StatusIndicator,
   TrendArrow,
@@ -190,7 +190,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [selectedPlates, setSelectedPlates] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
-  const [isAllPlatesSelected, setIsAllPlatesSelected] = useState<boolean>(true); // Pré-selecionar "Todas"
   
   // Estado para preço do combustível
   const [fuelPrice, setFuelPrice] = useState<number>(5.5);
@@ -212,6 +211,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   
   // Estado para animação do dashboard
   const [isDashboardVisible, setIsDashboardVisible] = useState<boolean>(false);
+  
+  // Estado para controlar o drawer mobile
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState<boolean>(false);
   
   // Hook para gerenciar rate limiting
   const { rateLimitState, resetRateLimit, isRateLimited } = useRateLimit();
@@ -240,10 +242,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   // Opções de placas para o AutoComplete
   const plateOptions = useMemo(() => {
     const plates = (allDevices || [])
-      .map(device => {
-        const fullPlate = device.name || device.uniqueId;
-        return fullPlate.substring(0, 8); // Limitar a 8 caracteres
-      })
+      .map(device => device.name || device.uniqueId)
       .filter((plate, index, array) => array.indexOf(plate) === index) // Remove duplicatas
       .sort();
     
@@ -280,10 +279,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       setActiveTab('dashboard');
     } else if (path === '/settings') {
       setActiveTab('settings');
+    } else if (path === '/devices') {
+      setActiveTab('devices');
     } else if (path === '/drivers') {
       setActiveTab('drivers');
-    } else if (path === '/maintenances') {
-      setActiveTab('maintenances');
+    } else if (path === '/reports') {
+      setActiveTab('reports');
+    } else if (path === '/analytics') {
+      setActiveTab('analytics');
+    } else if (path === '/team') {
+      setActiveTab('team');
     }
   }, [location.pathname]);
   const { fetchDevices, fetchPositions, fetchEvents, fetchTrips, fetchDrivers, loading, error } = useTrackmaxApi();
@@ -947,19 +952,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
      let engineHours = ignitionSeconds / 3600;
 
-      // Debug para investigar valores altos
-      console.log(`🔍 DEBUG - Engine hours for device ${device.name}:`, {
-        ignitionSeconds,
-        engineHoursFromPositions: engineHours,
-        tripStatsEngineHours: tripStats?.engineHours,
-        numberOfTrips: tripStats?.trips
-      });
-
       if (tripStats?.engineHours) {
         const reportHours = tripStats.engineHours;
         // se os dados do relatório forem maiores, somamos para cobrir períodos sem posições
         if (reportHours > engineHours) {
-          console.log(`⚠️ Using trip report hours (${reportHours}h) instead of positions (${engineHours}h) for ${device.name}`);
           engineHours = reportHours;
         }
       }
@@ -1039,17 +1035,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       
       console.log('🔍 DEBUG - Totals calculated:', {
         deviceMetricsArrayLength: deviceMetricsArray.length,
-        totals: result,
-        totalEngineHours: result.engine,
-        averageHoursPerDevice: result.engine / deviceMetricsArray.length,
-        periodInHours: dateRange && dateRange[0] && dateRange[1] 
-          ? (dateRange[1].valueOf() - dateRange[0].valueOf()) / (1000 * 60 * 60)
-          : 24
+        totals: result
       });
       
       return result;
     },
-    [deviceMetricsArray, dateRange],
+    [deviceMetricsArray],
   );
 
   const totalDistanceKm = totals.distance;
@@ -1568,7 +1559,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       return idle > 0 ? sum + idle : sum;
     }, 0);
 
-  const weeklyDistanceTotal = sumDistanceForKeys(weeklyKeys);
+  const weeklyDistanceTotalRaw = sumDistanceForKeys(weeklyKeys);
+  const weeklyDistanceTotal = weeklyDistanceTotalRaw > 0 ? weeklyDistanceTotalRaw : totalDistanceKm;
   const previousDistanceTotal = previousKeys.length === weeklySampleCount ? sumDistanceForKeys(previousKeys) : null;
 
   const weeklyDrivingTotal = sumDrivingForKeys(weeklyKeys);
@@ -2447,8 +2439,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       }
     })();
 
-    // Filtrar por placas selecionadas (se "Todas" estiver selecionado, não filtra)
-    const matchesPlates = isAllPlatesSelected || selectedPlates.length === 0 || 
+    // Filtrar por placas selecionadas
+    const matchesPlates = selectedPlates.length === 0 || 
       selectedPlates.some(plate => 
         device.name.toLowerCase().includes(plate.toLowerCase()) ||
         device.uniqueId.toLowerCase().includes(plate.toLowerCase())
@@ -2723,9 +2715,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
   // Renderizar conteúdo baseado na aba ativa
   const renderContent = () => {
-    switch (activeTab) {
-            case 'dashboard':
-        return (
+    // Sempre renderizar o children (Outlet) para que as rotas funcionem corretamente
+    return children;
+  };
           <div style={{ padding: isMobile ? '16px' : '24px', position: 'relative' }}>
 
             <div
@@ -2753,26 +2745,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     Visão geral da frota em tempo real
                   </span>
                 </div>
-                <Tooltip 
-                  title="🚧 Função em desenvolvimento" 
-                  placement="top"
-                  overlayStyle={{ maxWidth: '300px' }}
+                <Button
+                  type="primary"
+                  icon={<SettingOutlined />}
+                  style={{
+                    height: '44px',
+                    paddingInline: '20px',
+                    borderRadius: '9999px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 45%, #0284c7 100%)',
+                    boxShadow: '0 8px 20px rgba(14, 165, 233, 0.25)',
+                  }}
                 >
-                  <Button
-                    type="primary"
-                    icon={<SettingOutlined />}
-                    style={{
-                      height: '44px',
-                      paddingInline: '20px',
-                      borderRadius: '9999px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 45%, #0284c7 100%)',
-                      boxShadow: '0 8px 20px rgba(14, 165, 233, 0.25)',
-                    }}
-                  >
-                    Personalizar painel
-                  </Button>
-                </Tooltip>
+                  Personalizar painel
+                </Button>
               </div>
 
               <div
@@ -2803,83 +2789,68 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                       Ajuste rapidamente os dados exibidos no painel
                     </div>
                   </div>
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={() => setShowFuelPriceInput((prev) => !prev)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      color: '#0f172a',
+                      background: showFuelPriceInput ? 'rgba(14, 165, 233, 0.12)' : 'transparent',
+                      borderRadius: 999,
+                      paddingInline: 12,
+                    }}
+                  >
+                    {showFuelPriceInput ? 'Ocultar preço de combustível' : 'Informar preço de combustível'}
+                  </Button>
                 </div>
 
                 <Row gutter={[16, 0]} style={{ marginBottom: '8px' }}>
-                  <Col xs={24} md={6}>
+                  <Col xs={24} md={10}>
                     <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                       Placas
                     </Text>
                   </Col>
-                  <Col xs={24} md={9}>
+                  <Col xs={24} md={10}>
                     <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                       Período
                     </Text>
                   </Col>
-                  <Col xs={24} md={5}>
-                    <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      Preço combustível
-                    </Text>
-                  </Col>
                   <Col xs={24} md={4}>
-                    <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      Ação
-                    </Text>
+                    {showFuelPriceInput && (
+                      <Text strong style={{ color: '#1e293b', fontSize: '12px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                        Preço combustível
+                      </Text>
+                    )}
                   </Col>
                 </Row>
 
                 <Row gutter={[16, 0]} align="middle" className="custom-filters">
-                  <Col xs={24} md={6}>
-                    <Select
-                      mode="multiple"
-                      value={isAllPlatesSelected ? [] : selectedPlates}
-                      onChange={(values: string[]) => {
-                        if (values.length === 0) {
-                          setIsAllPlatesSelected(true);
-                          setSelectedPlates([]);
-                        } else {
-                          setIsAllPlatesSelected(false);
-                          // Limitar a 8 caracteres cada placa
-                          const limitedValues = values.map(v => v.substring(0, 8));
-                          setSelectedPlates(limitedValues);
+                  <Col xs={24} md={10}>
+                    <AutoComplete
+                      value={searchPlates}
+                      onChange={setSearchPlates}
+                      onSelect={(value) => {
+                        if (value && !selectedPlates.includes(value)) {
+                          const nextPlates = [...selectedPlates, value];
+                          setSelectedPlates(nextPlates);
+                          setSearchPlates('');
                           if (filteredDeviceIds !== null) {
-                            void runSearch(limitedValues);
+                            void runSearch(nextPlates);
                           }
                         }
                       }}
-                      placeholder={isAllPlatesSelected ? "✓ Todas as placas" : "Selecionar placas"}
-                      style={{ width: '100%' }}
-                      maxTagCount="responsive"
-                      maxTagTextLength={8}
-                      showSearch
-                      filterOption={(input, option) =>
-                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-                      }
-                      dropdownRender={(menu) => (
-                        <>
-                          <div style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>
-                            <Checkbox
-                              checked={isAllPlatesSelected}
-                              onChange={(e) => {
-                                setIsAllPlatesSelected(e.target.checked);
-                                if (e.target.checked) {
-                                  setSelectedPlates([]);
-                                  if (filteredDeviceIds !== null) {
-                                    void runSearch([]);
-                                  }
-                                }
-                              }}
-                            >
-                              Todas as placas
-                            </Checkbox>
-                          </div>
-                          {menu}
-                        </>
-                      )}
                       options={plateOptions}
+                      placeholder="Todas ou selecionar as desejadas"
+                      style={{ width: '100%', height: '40px' }}
+                      filterOption={(inputValue, option) =>
+                        option?.value.toUpperCase().indexOf(inputValue.toUpperCase()) !== -1
+                      }
                     />
                   </Col>
-                  <Col xs={24} md={9}>
+                  <Col xs={24} md={10}>
                 <RangePicker
                   value={dateRange}
                   onChange={handleDateRangeChange}
@@ -2896,60 +2867,65 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   ]}
                 />
                   </Col>
-                  <Col xs={24} md={5}>
-                    <InputNumber
-                      value={fuelPrice}
-                      min={0}
-                      step={0.1}
-                      style={{ width: '100%', height: '40px', textAlign: 'center' }}
-                      formatter={(value) => `R$ ${(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                      parser={(value) => {
-                        if (!value) return 0;
-                        const normalized = value
-                          .toString()
-                          .replace(/[^\d,.-]/g, '')
-                          .replace(/,/g, '.');
-                        const parsed = parseFloat(normalized);
-                        return Number.isNaN(parsed) ? fuelPrice : parsed;
-                      }}
-                      onChange={(value) => {
-                        if (typeof value === 'number' && !Number.isNaN(value)) {
-                          setFuelPrice(value);
-                        }
-                      }}
-                      className="fuel-price-input"
-                    />
-                  </Col>
                   <Col xs={24} md={4}>
-                    <Button
-                      type="primary"
-                      onClick={handleSearch}
-                      loading={isSearching}
-                      disabled={isSearching}
-                      style={{ 
-                        width: '100%', 
-                        height: '40px',
-                        borderRadius: '8px',
-                        background: isSearching 
-                          ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
-                          : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
-                        border: 'none',
-                        boxShadow: isSearching 
-                          ? '0 2px 8px rgba(148, 163, 184, 0.3)'
-                          : '0 4px 12px rgba(96, 165, 250, 0.3)',
-                        transition: 'all 0.3s ease'
-                      }}
-                      icon={!isSearching ? <SearchOutlined /> : undefined}
-                    >
-                      {isSearching ? (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Spin size="small" />
-                          Buscando...
-                        </span>
-                      ) : (
-                        'Buscar'
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: showFuelPriceInput ? 8 : 0 }}>
+                      <Button
+                        type="primary"
+                        onClick={handleSearch}
+                        loading={isSearching}
+                        disabled={isSearching}
+                        style={{ 
+                          width: '100%', 
+                          height: '40px',
+                          background: isSearching 
+                            ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%)'
+                            : 'linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%)',
+                          border: 'none',
+                          boxShadow: isSearching 
+                            ? '0 2px 8px rgba(148, 163, 184, 0.3)'
+                            : '0 4px 12px rgba(96, 165, 250, 0.3)',
+                          transition: 'all 0.3s ease'
+                        }}
+                        icon={!isSearching ? <SearchOutlined /> : undefined}
+                      >
+                        {isSearching ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Spin size="small" />
+                            Buscando...
+                          </span>
+                        ) : (
+                          'Buscar'
+                        )}
+                      </Button>
+                      {showFuelPriceInput && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <InputNumber
+                            value={fuelPrice}
+                            min={0}
+                            step={0.1}
+                            style={{ width: '100%' }}
+                            formatter={(value) => `R$ ${(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            parser={(value) => {
+                              if (!value) return 0;
+                              const normalized = value
+                                .toString()
+                                .replace(/[^\d,.-]/g, '')
+                                .replace(/,/g, '.');
+                              const parsed = parseFloat(normalized);
+                              return Number.isNaN(parsed) ? fuelPrice : parsed;
+                            }}
+                            onChange={(value) => {
+                              if (typeof value === 'number' && !Number.isNaN(value)) {
+                                setFuelPrice(value);
+                              }
+                            }}
+                          />
+                          <Text style={{ fontSize: '11px', color: '#64748b' }}>
+                            Utilizado para estimar custos.
+                          </Text>
+                        </div>
                       )}
-                    </Button>
+                    </div>
                   </Col>
                 </Row>
 
@@ -2993,7 +2969,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             {hasSearched && !isSearching && (
               <Alert
                 message="Busca realizada com sucesso!"
-                description={`Filtros aplicados: ${isAllPlatesSelected ? 'Todas as placas' : selectedPlates.length > 0 ? `${selectedPlates.length} placa(s) selecionada(s)` : 'Todas as placas'} • Período: ${dateRange[0].format('DD/MM/YYYY HH:mm')} → ${dateRange[1].format('DD/MM/YYYY HH:mm')}`}
+                description={`Filtros aplicados: ${selectedPlates.length > 0 ? `${selectedPlates.length} placa(s) selecionada(s)` : 'Todas as placas'} • Período: ${dateRange[0].format('DD/MM/YYYY HH:mm')} → ${dateRange[1].format('DD/MM/YYYY HH:mm')}`}
                 type="success"
                 showIcon
                 closable
@@ -5431,29 +5407,59 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         isActive={isRateLimited} 
         onRetry={resetRateLimit}
       />
-      {/* Sidebar Shadcn */}
-      <ShadcnSidebar
+      {/* Modern Sidebar com Drawer para Mobile */}
+      <ModernSidebar
+        isOpen={isMobileDrawerOpen}
+        onOpenChange={setIsMobileDrawerOpen}
+        isMobile={isMobile}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed(!collapsed)}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onLogout={() => setLogoutModalVisible(true)}
       />
 
       <Layout 
         style={{
-          marginLeft: collapsed ? '64px' : '256px',
+          marginLeft: isMobile ? '0' : (collapsed ? '80px' : '320px'),
           height: '100vh',
           position: 'relative',
           transition: 'margin-left 0.3s ease',
           overflow: 'hidden'
         }}
       >
+        {/* Mobile Header com Menu Button */}
+        {isMobile && (
+          <div 
+            className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-slate-200 shadow-sm"
+            style={{ height: '60px' }}
+          >
+            <div className="flex items-center justify-between h-full px-4">
+              <Button
+                type="text"
+                size="small"
+                onClick={() => setIsMobileDrawerOpen(true)}
+                style={{ height: '32px', width: '32px', padding: '0' }}
+              >
+                <BarsOutlined className="h-5 w-5" />
+              </Button>
+              <div className="flex items-center gap-2">
+                <img 
+                  src="/image.png" 
+                  alt="TrackMAX"
+                  className="h-8 w-8 rounded-lg"
+                />
+                <span className="font-semibold text-slate-900">TrackMAX</span>
+              </div>
+              <div className="w-8" /> {/* Spacer para centralizar */}
+            </div>
+          </div>
+        )}
 
         {/* Main Content */}
         <Content className="responsive-content" style={{ 
           margin: '0',
           padding: isMobile ? '16px' : '24px',
+          paddingTop: isMobile ? '76px' : '24px', // Adiciona espaço para o header mobile
           background: contentBackground,
           height: '100vh',
           overflowY: 'auto',

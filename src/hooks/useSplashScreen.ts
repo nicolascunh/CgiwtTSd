@@ -16,8 +16,11 @@ const PROGRESSIVE_MESSAGES = [
 ];
 
 export const useSplashScreen = () => {
+  // Verificar se é o primeiro carregamento
+  const isFirstLoad = !sessionStorage.getItem('trackmax-app-loaded');
+  
   const [splashState, setSplashState] = useState<SplashScreenState>({
-    isVisible: true,
+    isVisible: isFirstLoad,
     message: PROGRESSIVE_MESSAGES[0]
   });
 
@@ -51,6 +54,9 @@ export const useSplashScreen = () => {
   }, []);
 
   const hideSplash = useCallback(() => {
+    // Marcar que o app já foi carregado
+    sessionStorage.setItem('trackmax-app-loaded', 'true');
+    
     // Garantir que a splash screen seja visível por pelo menos 3 segundos
     const elapsedTime = Date.now() - (window as any).splashStartTime;
     const minDisplayTime = 3000; // 3 segundos
@@ -105,27 +111,30 @@ export const useSplashScreen = () => {
   }, [startProgressiveMessages]);
 
   useEffect(() => {
-    // Marcar tempo de início da splash screen
-    (window as any).splashStartTime = Date.now();
-    
-    // Inicia mensagens progressivas automaticamente
-    startProgressiveMessages();
+    // Só executar se for o primeiro carregamento
+    if (isFirstLoad) {
+      // Marcar tempo de início da splash screen
+      (window as any).splashStartTime = Date.now();
+      
+      // Inicia mensagens progressivas automaticamente
+      startProgressiveMessages();
 
-    // Auto-hide após 5 segundos como fallback
-    const autoHideTimer = setTimeout(() => {
-      hideSplash();
-    }, 5000);
+      // Auto-hide após 5 segundos como fallback
+      const autoHideTimer = setTimeout(() => {
+        hideSplash();
+      }, 5000);
 
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (minDisplayTimeRef.current) {
-        clearTimeout(minDisplayTimeRef.current);
-      }
-      clearTimeout(autoHideTimer);
-    };
-  }, [startProgressiveMessages, hideSplash]);
+      return () => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+        if (minDisplayTimeRef.current) {
+          clearTimeout(minDisplayTimeRef.current);
+        }
+        clearTimeout(autoHideTimer);
+      };
+    }
+  }, [isFirstLoad, startProgressiveMessages, hideSplash]);
 
   return {
     splashState,
