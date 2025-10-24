@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Tooltip } from 'antd';
 import { 
   CarOutlined, 
   UserOutlined, 
@@ -17,7 +18,8 @@ import {
   TeamOutlined,
   FileTextOutlined,
   BarChartOutlined,
-  MenuOutlined
+  MenuOutlined,
+  SyncOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router';
 import { useLogout } from '@refinedev/core';
@@ -52,43 +54,36 @@ export const ModernSidebar: React.FC<ModernSidebarProps> = ({
       key: 'dashboard',
       label: 'Dashboard',
       icon: <DashboardOutlined className="h-5 w-5" />,
-      path: '/dashboard'
-    },
-    {
-      key: 'devices',
-      label: 'Dispositivos',
-      icon: <CarOutlined className="h-5 w-5" />,
-      path: '/devices'
+      path: '/dashboard',
+      disabled: false
     },
     {
       key: 'drivers',
       label: 'Motoristas',
       icon: <UserOutlined className="h-5 w-5" />,
-      path: '/drivers'
+      path: '/drivers',
+      disabled: true
     },
     {
-      key: 'reports',
-      label: 'Relatórios',
-      icon: <FileTextOutlined className="h-5 w-5" />,
-      path: '/reports'
+      key: 'maintenances',
+      label: 'Manutenções',
+      icon: <CarOutlined className="h-5 w-5" />,
+      path: '/maintenances',
+      disabled: true
     },
     {
-      key: 'analytics',
-      label: 'Analytics',
-      icon: <BarChartOutlined className="h-5 w-5" />,
-      path: '/analytics'
-    },
-    {
-      key: 'team',
-      label: 'Equipe',
-      icon: <TeamOutlined className="h-5 w-5" />,
-      path: '/team'
+      key: 'tires',
+      label: 'Controle de Pneus',
+      icon: <SyncOutlined className="h-5 w-5" />,
+      path: '/tires',
+      disabled: true
     },
     {
       key: 'settings',
       label: 'Configurações',
       icon: <SettingOutlined className="h-5 w-5" />,
-      path: '/settings'
+      path: '/settings',
+      disabled: false
     }
   ];
 
@@ -140,35 +135,52 @@ export const ModernSidebar: React.FC<ModernSidebarProps> = ({
       {/* Navigation Menu */}
       <div className="flex-1 overflow-y-auto p-4">
         <nav className="space-y-2">
-          {menuItems.map((item) => (
-            <Button
-              key={item.key}
-              variant={activeTab === item.key ? "default" : "ghost"}
-              className={`w-full justify-start h-12 px-4 ${
-                activeTab === item.key 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-              onClick={() => handleNavigation(item.path, item.key)}
-            >
-              <div className="flex items-center gap-3">
-                {item.icon}
-                {!collapsed && (
-                  <span className="font-medium">{item.label}</span>
-                )}
-              </div>
-            </Button>
-          ))}
+          {menuItems.map((item) => {
+            const button = (
+              <Button
+                key={item.key}
+                variant={activeTab === item.key ? "default" : "ghost"}
+                className={`w-full justify-start h-12 px-4 ${
+                  activeTab === item.key 
+                    ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                    : 'text-slate-700 hover:bg-slate-100'
+                } ${item.disabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+                onClick={() => !item.disabled && handleNavigation(item.path, item.key)}
+              >
+                <div className="flex items-center gap-3">
+                  {item.icon}
+                  {!collapsed && (
+                    <span className="font-medium">{item.label}</span>
+                  )}
+                </div>
+              </Button>
+            );
+
+            if (item.disabled) {
+              return (
+                <Tooltip
+                  key={item.key}
+                  title="🚧 Em desenvolvimento"
+                  placement="right"
+                  mouseEnterDelay={0.3}
+                >
+                  {button}
+                </Tooltip>
+              );
+            }
+
+            return button;
+          })}
         </nav>
       </div>
 
       {/* Footer com Usuário e Logout */}
-      <div className="p-4 border-t border-slate-200 bg-slate-50">
+      <div className="p-4 border-t border-slate-200">
         <div className="space-y-3">
           {/* User Profile e Logout */}
           <div className="space-y-2">
-            {/* User Profile - Sem Card */}
-            <div className="flex items-center gap-3 px-3 py-2">
+            {/* User Profile - Centralizado */}
+            <div className={`flex ${collapsed ? 'flex-col' : 'flex-row'} items-center ${collapsed ? 'gap-2' : 'gap-3'} px-3 py-2`}>
               <Avatar className="h-8 w-8">
                 <AvatarImage src="/user-avatar.jpg" alt="User" />
                 <AvatarFallback className="bg-blue-500 text-white text-xs font-semibold">
@@ -176,16 +188,13 @@ export const ModernSidebar: React.FC<ModernSidebarProps> = ({
                 </AvatarFallback>
               </Avatar>
               {!collapsed && (
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 truncate">
-                    Usuário Logado
-                  </p>
-                  <p className="text-xs text-slate-500 truncate">
+                <div className="flex-1 min-w-0 text-center">
+                  <p className="text-sm font-medium text-slate-700 truncate">
                     usuario@trackmax.com
                   </p>
                 </div>
               )}
-              {/* Botão Sair no lugar do Online */}
+              {/* Botão Sair */}
               <Button
                 variant="ghost"
                 size="sm"

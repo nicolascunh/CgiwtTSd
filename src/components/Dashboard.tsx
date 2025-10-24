@@ -177,6 +177,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [deviceFilter, setDeviceFilter] = useState<DeviceFilter>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>(() => [dayjs().subtract(24, 'hour'), dayjs()]);
   
   // Debounce para evitar requisições desnecessárias
@@ -510,13 +511,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const runSearch = useCallback(async (plates: string[]) => {
     console.log('🔍 DEBUG - runSearch started:', { plates, allDevicesLength: allDevices.length });
     
+    // Reset estados no início para permitir nova busca
+    setIsSearching(true);
+    setIsLargeFleetLoading(false);
+    
     if (!allDevices.length) {
       console.log('🔍 DEBUG - No devices available, returning');
+      setIsSearching(false);
       return;
     }
     const [start, end] = dateRange;
     if (!start || !end) {
       console.log('🔍 DEBUG - No date range, returning');
+      setIsSearching(false);
       return;
     }
 
@@ -552,34 +559,62 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
     setHasSearched(true);
     
+    // Variável para rastrear se a busca foi concluída
+    let searchCompleted = false;
+    
     try {
-      console.log('🔍 DEBUG - Starting fetchTripsForRange');
+      console.log('🔍 DEBUG - Starting fetchTripsForRange and fetchPositions');
       
-      // Timeout de segurança para evitar blur infinito
+      // Timeout de segurança para evitar loading infinito
       const timeoutId = setTimeout(() => {
-        console.log('🔍 DEBUG - Search timeout reached, forcing end');
-        setIsSearching(false);
-        setIsLargeFleetLoading(false);
+        if (!searchCompleted) {
+          console.log('🔍 DEBUG - Search timeout reached, forcing end');
+          setIsSearching(false);
+          setIsLargeFleetLoading(false);
+          searchCompleted = true;
+        }
       }, 30000); // 30 segundos
       
-      await fetchTripsForRange(matchingDeviceIds, start, end, {
-        onStart: () => {
-          console.log('🔍 DEBUG - fetchTripsForRange onStart');
-          setIsSearching(true);
-        },
-        onEnd: () => {
-          console.log('🔍 DEBUG - fetchTripsForRange onEnd');
-          clearTimeout(timeoutId);
-          setIsSearching(false);
-        },
-        skipSignatureCheck: true,
-      });
-      console.log('🔍 DEBUG - fetchTripsForRange completed successfully');
+      // Buscar trips E positions em paralelo
+      await Promise.all([
+        fetchTripsForRange(matchingDeviceIds, start, end, {
+          onStart: () => {
+            console.log('🔍 DEBUG - fetchTripsForRange onStart');
+            // Já está em loading, não precisa setar novamente
+          },
+          onEnd: () => {
+            console.log('🔍 DEBUG - fetchTripsForRange onEnd');
+          },
+          skipSignatureCheck: true,
+        }),
+        // Buscar positions do período
+        fetchPositions(matchingDeviceIds, 10000).then((fetchedPositions) => {
+          console.log('✅ Positions loaded:', fetchedPositions.length);
+          setPositions(fetchedPositions);
+        }).catch(error => {
+          console.error('❌ Error fetching positions:', error);
+        })
+      ]);
+      
+      console.log('🔍 DEBUG - fetchTripsForRange and fetchPositions completed successfully');
+      clearTimeout(timeoutId);
+      if (!searchCompleted) {
+        setIsSearching(false);
+        searchCompleted = true;
+      }
     } catch (error) {
       console.error('🔍 DEBUG - fetchTripsForRange error:', error);
-      setIsSearching(false);
+      if (!searchCompleted) {
+        setIsSearching(false);
+        searchCompleted = true;
+      }
     } finally {
+      // Garantir que sempre reseta os estados
       setIsLargeFleetLoading(false);
+      if (!searchCompleted) {
+        setIsSearching(false);
+        searchCompleted = true;
+      }
     }
   }, [allDevices, dateRange, fetchTripsForRange]);
 
@@ -604,18 +639,29 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
     let isCancelled = false;
 
-    fetchTripsForRange(activeDeviceIds, start, end, {
-      onStart: () => {
+    Promise.all([
+      fetchTripsForRange(activeDeviceIds, start, end, {
+        onStart: () => {
+          if (!isCancelled) {
+            setIsRangeUpdating(true);
+          }
+        },
+        onEnd: () => {
+          if (!isCancelled) {
+            setIsRangeUpdating(false);
+          }
+        },
+      }),
+      // Buscar positions do período
+      fetchPositions(activeDeviceIds, 10000).then((fetchedPositions) => {
         if (!isCancelled) {
-          setIsRangeUpdating(true);
+          console.log('✅ Positions loaded for date range:', fetchedPositions.length);
+          setPositions(fetchedPositions);
         }
-      },
-      onEnd: () => {
-        if (!isCancelled) {
-          setIsRangeUpdating(false);
-        }
-      },
-    }).catch(() => {
+      }).catch(error => {
+        console.error('❌ Error fetching positions for date range:', error);
+      })
+    ]).catch(() => {
       if (!isCancelled) {
         setIsRangeUpdating(false);
       }
@@ -624,7 +670,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return () => {
       isCancelled = true;
     };
-  }, [debouncedDateRange, activeDeviceIds, fetchTripsForRange]);
+  }, [debouncedDateRange, activeDeviceIds, fetchTripsForRange, fetchPositions]);
 
   // Função para selecionar dispositivo e carregar posições
   const handleDeviceSelect = async (device: Device) => {
@@ -754,7 +800,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
   const tripAggregation = useMemo(() => {
     const activeTrips = isLoadingPartial ? partialTrips : trips;
-    const statsMap = new Map<number, { distanceKm: number; trips: number; engineHours: number; fuel: number }>();
+    const statsMap = new Map<number, { distanceKm: number; trips: number; engineHours: number; drivingHours: number; fuel: number }>();
     let totalTrips = 0;
     let totalEngineHours = 0;
     let estimatedFuel = 0;
@@ -764,6 +810,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       const durationRaw = trip.duration || 0;
       const engineRaw = trip.engineHours ?? durationRaw;
       const engineHours = normalizeDurationHours(engineRaw);
+      const drivingHours = normalizeDurationHours(durationRaw); // Tempo da viagem (aproximação)
       const device = deviceMap.get(trip.deviceId);
       const consumption = (device?.attributes as { consumption?: { kmPerL?: number } } | undefined)?.consumption?.kmPerL;
 
@@ -778,10 +825,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       totalEngineHours += engineHours;
       estimatedFuel += fuel;
 
-      const current = statsMap.get(trip.deviceId) || { distanceKm: 0, trips: 0, engineHours: 0, fuel: 0 };
+      const current = statsMap.get(trip.deviceId) || { distanceKm: 0, trips: 0, engineHours: 0, drivingHours: 0, fuel: 0 };
       current.distanceKm += distanceKm;
       current.trips += 1;
       current.engineHours += engineHours;
+      current.drivingHours += drivingHours;
       current.fuel += fuel;
       statsMap.set(trip.deviceId, current);
     });
@@ -797,7 +845,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const { statsMap: tripStatsMap } = tripAggregation;
 
   const deviceMetrics = useMemo(() => {
-    const metrics = new Map<number, { device: Device; distanceKm: number; trips: number; engineHours: number; idleHours: number; fuel: number; lastPosition?: Position }>();
+    const metrics = new Map<number, { device: Device; distanceKm: number; trips: number; engineHours: number; drivingHours: number; idleHours: number; fuel: number; lastPosition?: Position }>();
 
     console.log('🔍 DEBUG - deviceMetrics calculation:', {
       effectiveDevicesLength: effectiveDevices.length,
@@ -875,10 +923,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
 
     effectiveDevices.forEach((device) => {
       const devicePositions = positionsByDevice.get(device.id) || [];
+      const tripStats = tripStatsMap.get(device.id);
+      
+      // Calcular período real das positions
+      const firstPosition = devicePositions[0];
+      const lastPosition = devicePositions[devicePositions.length - 1];
+      const firstTime = firstPosition ? parseTime(firstPosition) : 0;
+      const lastTime = lastPosition ? parseTime(lastPosition) : 0;
+      const positionsPeriodHours = (lastTime - firstTime) / (1000 * 60 * 60);
+
+      // ⚠️ VALIDAÇÃO: Processar device se tiver trips OU positions suficientes
+      // Se temos tripStats (trips do Traccar), processar mesmo sem positions
+      if (devicePositions.length < 2 && !tripStats) {
+        console.log(`⚠️ Device ${device.name} ignorado: apenas ${devicePositions.length} position(s) e sem trips`);
+        return; // Pula este dispositivo
+      }
+      
+      if (tripStats && devicePositions.length < 2) {
+        console.log(`✅ Device ${device.name}: Processando com trips do Traccar (${tripStats.trips} viagens, ${tripStats.engineHours.toFixed(2)}h), sem positions`);
+      }
 
       console.log(`🔍 DEBUG - Processing device ${device.name} (${device.id}):`, {
         devicePositionsLength: devicePositions.length,
-        startTime: new Date(startTime).toISOString()
+        periodoDasPositions: `${positionsPeriodHours.toFixed(2)}h`,
+        primeiraPosition: firstPosition ? new Date(parseTime(firstPosition)).toISOString() : 'N/A',
+        ultimaPosition: lastPosition ? new Date(parseTime(lastPosition)).toISOString() : 'N/A',
+        periodoSelecionado: `${new Date(startTime).toISOString()} → ${new Date(endTime).toISOString()}`,
+        periodoMaximoEsperado: `${((endTime - startTime) / (1000 * 60 * 60)).toFixed(2)}h`
       });
 
       let distanceKm = 0;
@@ -886,7 +957,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       let maxTotal = -Infinity;
       let incrementalMeters = 0;
       let ignitionSeconds = 0;
+      let drivingSeconds = 0; // Tempo em movimento > 5 km/h
       let idleSeconds = 0;
+      let currentIdleStreak = 0; // Controlar sequência de marcha lenta
+      const MIN_IDLE_SECONDS = 180; // 3 minutos mínimos
+      const MIN_DRIVING_SPEED_KMH = 5; // Velocidade mínima para considerar "em movimento"
 
       devicePositions.forEach((pos) => {
         const attrs = pos.attributes as { totalDistance?: number } | undefined;
@@ -897,6 +972,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         }
       });
 
+      let positionsOutOfRange = 0; // Para debug
+      
       for (let i = 0; i < devicePositions.length - 1; i++) {
         const current = devicePositions[i];
         const next = devicePositions[i + 1];
@@ -906,20 +983,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           continue;
         }
 
-        const deltaSeconds = (nextTime - currentTime) / 1000;
+        // ⚠️ VALIDAÇÃO: Ignorar positions fora do período selecionado
+        if (currentTime < startTime || currentTime > endTime) {
+          positionsOutOfRange++;
+          continue;
+        }
+
+        let deltaSeconds = (nextTime - currentTime) / 1000;
         if (deltaSeconds <= 0) {
           continue;
         }
 
         const currentAttrs = current.attributes as { ignition?: boolean | string | number; distance?: number } | undefined;
         const ignition = toBoolean(currentAttrs?.ignition);
+        const speedMeters = typeof current.speed === 'number' ? current.speed : 0;
+        const speedKmh = speedMeters * 3.6;
+        
+        // Debug: Log de velocidade para primeira posição de cada dispositivo
+        if (i === 0) {
+          console.log(`🚗 DEBUG - Primeira posição de ${device.name}:`, {
+            speed: current.speed,
+            speedMeters,
+            speedKmh,
+            ignition,
+            hasSpeed: typeof current.speed === 'number'
+          });
+        }
+        
         if (ignition) {
           ignitionSeconds += deltaSeconds;
-          const speedMeters = typeof current.speed === 'number' ? current.speed : 0;
-          const speedKmh = speedMeters * 3.6;
-          if (speedKmh < 2) {
-            idleSeconds += deltaSeconds;
+          
+          // Tempo de condução: apenas quando velocidade > 5 km/h
+          if (speedKmh > MIN_DRIVING_SPEED_KMH) {
+            drivingSeconds += deltaSeconds;
+            currentIdleStreak = 0; // Reseta sequência de idle
           }
+          
+          // Marcha lenta: ignição ligada + 0 km/h após 3 minutos contínuos
+          if (speedKmh === 0) {
+            currentIdleStreak += deltaSeconds;
+            // Só conta se passar de 3 minutos contínuos
+            if (currentIdleStreak >= MIN_IDLE_SECONDS) {
+              idleSeconds += deltaSeconds;
+            }
+          } else if (speedKmh <= MIN_DRIVING_SPEED_KMH) {
+            // Velocidade entre 0 e 5 km/h não conta como condução nem como idle
+            currentIdleStreak = 0;
+          }
+        } else {
+          currentIdleStreak = 0;
         }
 
         const currentTotal = toNumber((current.attributes as Record<string, unknown> | undefined)?.totalDistance);
@@ -938,30 +1050,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         distanceKm = incrementalMeters / 1000;
       }
 
-      const tripStats = tripStatsMap.get(device.id);
+      // tripStats já foi declarado no início do forEach
       const trips = tripStats?.trips ?? 0;
       const tripDistanceKm = tripStats?.distanceKm ?? 0;
       if (tripDistanceKm > distanceKm) {
         distanceKm = tripDistanceKm;
       }
 
-     let engineHours = ignitionSeconds / 3600;
-
-      // Debug para investigar valores altos
-      console.log(`🔍 DEBUG - Engine hours for device ${device.name}:`, {
-        ignitionSeconds,
-        engineHoursFromPositions: engineHours,
-        tripStatsEngineHours: tripStats?.engineHours,
-        numberOfTrips: tripStats?.trips
-      });
-
-      if (tripStats?.engineHours) {
-        const reportHours = tripStats.engineHours;
-        // se os dados do relatório forem maiores, somamos para cobrir períodos sem posições
-        if (reportHours > engineHours) {
-          console.log(`⚠️ Using trip report hours (${reportHours}h) instead of positions (${engineHours}h) for ${device.name}`);
-          engineHours = reportHours;
-        }
+      // ⚠️ IMPORTANTE: Sempre priorizar engineHours do servidor Traccar (via trips)
+      // O Traccar calcula corretamente baseado no atributo 'ignition' do rastreador
+      // Nosso cálculo manual é apenas fallback quando não há trips no período
+      let engineHours = 0;
+      
+      if (tripStats?.engineHours && tripStats.engineHours > 0) {
+        // USAR SEMPRE os dados do Traccar (já convertidos de ms para horas)
+        engineHours = tripStats.engineHours;
+        console.log(`✅ ${device.name}: Usando engineHours do Traccar: ${engineHours.toFixed(2)}h (${tripStats.trips} viagens)`);
+      } else {
+        // Fallback: calcular manualmente apenas se não houver trips
+        engineHours = ignitionSeconds / 3600;
+        console.log(`⚠️ ${device.name}: Usando cálculo manual (sem trips): ${engineHours.toFixed(2)}h`);
       }
 
       const consumption = (device.attributes as { consumption?: { kmPerL?: number } } | undefined)?.consumption?.kmPerL;
@@ -971,9 +1079,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         fuel = distanceKm / consumption;
       }
 
+      const drivingHours = drivingSeconds / 3600;
       const idleHours = idleSeconds / 3600;
       const tripIdleHours = Math.max((tripStats?.engineHours ?? 0) - (tripStats?.trips ?? 0), 0);
+      const tripDrivingHours = tripStats?.drivingHours ?? 0;
 
+      // IMPORTANTE: Priorizar dados das positions (mais precisos)
+      // Se não houver dados de condução das positions (sem velocidade), usar trips
+      // - drivingHours: calculado com filtro de velocidade > 5 km/h
+      // - idleHours: calculado com ignição ligada + 0 km/h após 3 minutos
+      const totalDrivingHoursPerDevice = drivingHours > 0 ? drivingHours : tripDrivingHours;
       const totalIdleHoursPerDevice = idleHours > 0 ? idleHours : tripIdleHours;
 
       const deviceMetrics = {
@@ -981,12 +1096,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         distanceKm,
         trips,
         engineHours,
+        drivingHours: totalDrivingHoursPerDevice,
         idleHours: totalIdleHoursPerDevice,
         fuel,
         lastPosition: devicePositions[devicePositions.length - 1],
       };
 
-      console.log(`🔍 DEBUG - Device ${device.name} final metrics:`, deviceMetrics);
+      console.log(`🔍 DEBUG - Device ${device.name} final metrics:`, {
+        ...deviceMetrics,
+        fontes: {
+          engineHours: tripStats?.engineHours ? `✅ Traccar (${tripStats.trips} viagens)` : '⚠️ Cálculo manual (sem trips)',
+          drivingHours: drivingHours > 0 ? '✅ Positions (velocidade > 5 km/h)' : `⚠️ Trips fallback (${tripDrivingHours.toFixed(2)}h)`,
+          idleHours: idleHours > 0 ? '✅ Positions (0 km/h após 3 min)' : `⚠️ Trips fallback (${tripIdleHours.toFixed(2)}h)`
+        },
+        valores: {
+          engineHours: `${engineHours.toFixed(2)}h`,
+          drivingHours: `${totalDrivingHoursPerDevice.toFixed(2)}h`,
+          idleHours: `${totalIdleHoursPerDevice.toFixed(2)}h`,
+          distanceKm: `${distanceKm.toFixed(2)}km`
+        }
+      });
 
       metrics.set(device.id, deviceMetrics);
     });
@@ -1030,17 +1159,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           acc.distance += metrics.distanceKm;
           acc.trips += metrics.trips;
           acc.engine += metrics.engineHours;
+          acc.driving += metrics.drivingHours || 0;
           acc.idle += metrics.idleHours;
           acc.fuel += metrics.fuel;
           return acc;
         },
-        { distance: 0, trips: 0, engine: 0, idle: 0, fuel: 0 },
+        { distance: 0, trips: 0, engine: 0, driving: 0, idle: 0, fuel: 0 },
       );
       
       console.log('🔍 DEBUG - Totals calculated:', {
         deviceMetricsArrayLength: deviceMetricsArray.length,
         totals: result,
         totalEngineHours: result.engine,
+        totalDrivingHours: result.driving,
+        totalIdleHours: result.idle,
         averageHoursPerDevice: result.engine / deviceMetricsArray.length,
         periodInHours: dateRange && dateRange[0] && dateRange[1] 
           ? (dateRange[1].valueOf() - dateRange[0].valueOf()) / (1000 * 60 * 60)
@@ -1055,8 +1187,55 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const totalDistanceKm = totals.distance;
   const totalTrips = totals.trips;
   const totalEngineHours = totals.engine;
+  const totalDrivingHours = totals.driving;
   const totalIdleHours = totals.idle;
   const estimatedFuel = totals.fuel;
+  
+  // Debug: Mostrar período e valores calculados
+  console.log('📊 RESUMO DO PERÍODO SELECIONADO:', {
+    periodo: dateRange ? `${dateRange[0].format('DD/MM/YYYY HH:mm')} → ${dateRange[1].format('DD/MM/YYYY HH:mm')}` : 'Não definido',
+    duracaoPeriodo: dateRange ? `${((dateRange[1].valueOf() - dateRange[0].valueOf()) / (1000 * 60 * 60)).toFixed(1)}h` : 'N/A',
+    totalVeiculos: deviceMetricsArray.length,
+    placasSelecionadas: isAllPlatesSelected ? 'TODAS' : selectedPlates.length > 0 ? selectedPlates.join(', ') : 'Nenhuma',
+    metricas: {
+      horasMotor: `${totalEngineHours.toFixed(2)}h (${Math.floor(totalEngineHours)}h ${Math.round((totalEngineHours % 1) * 60)}min)`,
+      horasConducao: `${totalDrivingHours.toFixed(2)}h (${Math.floor(totalDrivingHours)}h ${Math.round((totalDrivingHours % 1) * 60)}min)`,
+      horasIdle: `${totalIdleHours.toFixed(2)}h (${Math.floor(totalIdleHours)}h ${Math.round((totalIdleHours % 1) * 60)}min)`,
+      distancia: `${totalDistanceKm.toFixed(2)} km`,
+      viagens: totalTrips
+    }
+  });
+  
+  // Alerta de condução contínua: viagens com mais de 5h30 (5.5 horas)
+  const MIN_CONTINUOUS_DRIVING_HOURS = 5.5;
+  const longTrips = useMemo(() => {
+    return trips.filter(trip => {
+      const durationHours = normalizeDurationHours(trip.duration || 0);
+      return durationHours >= MIN_CONTINUOUS_DRIVING_HOURS;
+    });
+  }, [trips]);
+  
+  const longTripsCount = longTrips.length;
+  const longTripDevices = useMemo(() => {
+    const deviceIds = new Set(longTrips.map(t => t.deviceId));
+    return Array.from(deviceIds).map(id => deviceMap.get(id)?.name || `Dispositivo ${id}`);
+  }, [longTrips, deviceMap]);
+  
+  // Alertar no console sobre viagens longas (> 5h30)
+  useEffect(() => {
+    if (longTripsCount > 0) {
+      console.warn(`⚠️ ALERTA: ${longTripsCount} viagem(ns) com condução contínua > 5h30 detectada(s)!`, {
+        count: longTripsCount,
+        devices: longTripDevices,
+        trips: longTrips.map(t => ({
+          device: deviceMap.get(t.deviceId)?.name,
+          duration: `${normalizeDurationHours(t.duration || 0).toFixed(1)}h`,
+          start: t.startTime,
+          end: t.endTime
+        }))
+      });
+    }
+  }, [longTripsCount, longTripDevices, longTrips, deviceMap]);
   
   // Calcular eficiência real de combustível por dispositivo (km/l)
   const deviceFuelEfficiency = useMemo(() => {
@@ -1232,6 +1411,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     });
   };
 
+  // Formatar horas decimais para horas e minutos (ex: 5.5 -> "5h 30min")
+  const formatHoursMinutes = (hours: number): string => {
+    if (!Number.isFinite(hours) || hours <= 0) {
+      return '0h 0min';
+    }
+    
+    const totalMinutes = Math.round(hours * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const min = totalMinutes % 60;
+    
+    if (h === 0) {
+      return `${min}min`;
+    }
+    
+    return `${h}h ${min}min`;
+  };
+
   const formatDeltaLabel = (value: number, unit: string, fractionDigits = 1) => {
     if (!Number.isFinite(value) || value === 0) {
       return `±0${unit}`;
@@ -1285,9 +1481,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     if (!Number.isFinite(duration) || duration <= 0) {
       return 0;
     }
-    const oneHourInMilliseconds = 1000 * 60 * 60;
-    const isMilliseconds = duration >= oneHourInMilliseconds;
-    return isMilliseconds ? duration / oneHourInMilliseconds : duration / 3600;
+
+    const MILLISECONDS_PER_HOUR = 1000 * 60 * 60;
+    // Traccar returns trip duration and engineHours values in milliseconds (see docs/TRACCAR_API_REFERENCE.md).
+    return duration / MILLISECONDS_PER_HOUR;
   }
 
   const getTimestamp = (iso?: string) => {
@@ -1530,7 +1727,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     [maxVisualPoints],
   );
 
-  const FLEET_IDLE_FUEL_RATE = 0.8;
+  // Consumo médio em marcha lenta (litros/hora)
+  // Carro leve: 0.6-1.0 L/h | Caminhonete/diesel: 1.0-2.0 L/h | Caminhão: 2.5-4.0 L/h
+  // Usando média de 1.5 L/h (frota mista)
+  const FLEET_IDLE_FUEL_RATE = 1.5;
 
   const fuelCost = estimatedFuel * fuelPrice;
   const idleFuelLiters = totalIdleHours * FLEET_IDLE_FUEL_RATE;
@@ -1571,13 +1771,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const weeklyDistanceTotal = sumDistanceForKeys(weeklyKeys);
   const previousDistanceTotal = previousKeys.length === weeklySampleCount ? sumDistanceForKeys(previousKeys) : null;
 
-  const weeklyDrivingTotal = sumDrivingForKeys(weeklyKeys);
+  // Usar dados reais das métricas calculadas das positions (não trips)
+  const weeklyDrivingTotal = totalDrivingHours;
   const previousDrivingTotal = previousKeys.length === weeklySampleCount ? sumDrivingForKeys(previousKeys) : null;
 
-  const weeklyEngineTotal = sumEngineForKeys(weeklyKeys);
+  // Usar dados reais das positions com ignição ligada (não trips)
+  const weeklyEngineTotal = totalEngineHours;
   const previousEngineTotal = previousKeys.length === weeklySampleCount ? sumEngineForKeys(previousKeys) : null;
 
-  const weeklyIdleTotal = sumIdleForKeys(weeklyKeys);
+  // Usar dados reais de marcha lenta (ignição + 0 km/h após 3 min)
+  const weeklyIdleTotal = totalIdleHours;
   const previousIdleTotal = previousKeys.length === weeklySampleCount ? sumIdleForKeys(previousKeys) : null;
 
   const weeklyFuelTotal = sumFuelForKeys(weeklyKeys);
@@ -1785,70 +1988,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return map;
   }, [drivers]);
 
-  const driverEventsChart = useMemo<StackedHorizontalBarsProps>(() => {
-    const summary = new Map<string, { speeding: number; fuel: number; harsh: number; sos: number }>();
+  // Card de Alertas - Condução Contínua > 5h30
+  const alertsData = useMemo(() => {
+    if (longTripsCount === 0) {
+      return {
+        hasAlerts: false,
+        totalAlerts: 0,
+        vehicles: [],
+        tripsPerVehicle: new Map<string, number>(),
+      };
+    }
 
-    events.forEach((event) => {
-      const deviceId = Number(event.deviceId);
-      if (!Number.isFinite(deviceId)) {
-        return;
-      }
-      const label =
-        driverByDeviceId.get(deviceId) ||
-        deviceMap.get(deviceId)?.name ||
-        `Device #${deviceId}`;
-      const entry =
-        summary.get(label) ?? { speeding: 0, fuel: 0, harsh: 0, sos: 0 };
-
-      switch (event.type) {
-        case 'overspeed':
-          entry.speeding += 1;
-          break;
-        case 'fuelDrop':
-        case 'fuelTheft':
-          entry.fuel += 1;
-          break;
-        case 'harshBraking':
-        case 'harshAcceleration':
-        case 'harshCornering':
-          entry.harsh += 1;
-          break;
-        case 'alarm':
-        case 'sos':
-        case 'sOS':
-          entry.sos += 1;
-          break;
-        default:
-          break;
-      }
-
-      summary.set(label, entry);
+    // Agrupar viagens por veículo
+    const tripsPerVehicle = new Map<string, number>();
+    longTrips.forEach(trip => {
+      const vehicleName = deviceMap.get(trip.deviceId)?.name || `Veículo ${trip.deviceId}`;
+      tripsPerVehicle.set(vehicleName, (tripsPerVehicle.get(vehicleName) || 0) + 1);
     });
 
-    const rows: StackedHorizontalDatum[] = Array.from(summary.entries())
-      .map(([label, counts]) => ({
-        label,
-        segments: [
-          { label: 'Excesso de velocidade', value: counts.speeding, color: '#ef4444' },
-          { label: 'Drenagem de combustível', value: counts.fuel, color: '#f97316' },
-          { label: 'Condução severa', value: counts.harsh, color: '#facc15' },
-          { label: 'SOS/Alertas', value: counts.sos, color: '#22c55e' },
-        ],
-      }))
-      .filter((item) => item.segments.some((segment) => segment.value > 0))
-      .sort((a, b) => {
-        const sum = (segments: { value: number }[]) =>
-          segments.reduce((acc, segment) => acc + segment.value, 0);
-        return sum(b.segments) - sum(a.segments);
-      })
-      .slice(0, 5);
-
     return {
-      title: 'Top 5 motoristas por eventos',
-      subtitle: rows.length ? 'Eventos categorizados por condutor' : undefined,
-      data: rows,
+      hasAlerts: true,
+      totalAlerts: longTripsCount,
+      vehicles: Array.from(tripsPerVehicle.entries())
+        .sort((a, b) => b[1] - a[1]) // Ordenar por quantidade de viagens
+        .slice(0, 5), // Top 5 veículos
+      tripsPerVehicle,
     };
-  }, [events, driverByDeviceId, deviceMap]);
+  }, [longTripsCount, longTrips, deviceMap]);
 
   const fuelSeries = useMemo(() => {
     return aggregateSeries(rangeKeys, (key) => dailyTripStats.get(key)?.fuelLiters ?? 0);
@@ -1949,11 +2115,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         miniChart: <Sparkline points={distanceSparklinePoints} color="#3b82f6" />,
       },
       {
-        title: 'Horas de motor',
-        value: formatNumber(weeklyEngineTotal, 1),
-        helper: weeklyLabel,
+        title: 'Horas de Motor',
+        value: formatHoursMinutes(weeklyEngineTotal),
+        helper: 'Tempo com ignição ligada total',
         comparisonLabel: previousEngineTotal !== null ? previousLabel : undefined,
-        comparisonValue: previousEngineTotal !== null ? `${formatNumber(previousEngineTotal, 1)} h` : undefined,
+        comparisonValue: previousEngineTotal !== null ? formatHoursMinutes(previousEngineTotal) : undefined,
         comparisonTrend:
           previousEngineTotal !== null && engineDelta !== 0 ? (
             <TrendArrow
@@ -1966,11 +2132,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         miniChart: <Sparkline points={engineSparklinePoints} color="#8b5cf6" />,
       },
       {
-        title: 'Tempo de condução (h)',
-        value: formatNumber(weeklyDrivingTotal, 1),
-        helper: weeklyLabel,
+        title: 'Tempo de Condução',
+        value: formatHoursMinutes(weeklyDrivingTotal),
+        helper: 'Tempo em movimento acima de 5 km/h',
         comparisonLabel: previousDrivingTotal !== null ? previousLabel : undefined,
-        comparisonValue: previousDrivingTotal !== null ? `${formatNumber(previousDrivingTotal, 1)} h` : undefined,
+        comparisonValue: previousDrivingTotal !== null ? formatHoursMinutes(previousDrivingTotal) : undefined,
         comparisonTrend:
           previousDrivingTotal !== null && drivingDelta !== 0 ? (
             <TrendArrow
@@ -2058,6 +2224,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     previousFuelCostTotal,
     previousIdleCostTotal,
     formatNumber,
+    formatHoursMinutes,
   ]);
 
   const toNumeric = (value: unknown): number | undefined => {
@@ -2756,7 +2923,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 <Tooltip 
                   title="🚧 Função em desenvolvimento" 
                   placement="top"
-                  overlayStyle={{ maxWidth: '300px' }}
+                  arrow
+                  styles={{ root: { maxWidth: '300px' } }}
                 >
                   <Button
                     type="primary"
@@ -2855,7 +3023,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                       filterOption={(input, option) =>
                         (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                       }
-                      dropdownRender={(menu) => (
+                      popupRender={(menu) => (
                         <>
                           <div style={{ padding: '8px', borderBottom: '1px solid #f0f0f0' }}>
                             <Checkbox
@@ -2887,7 +3055,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   showTime={{ format: 'HH:mm' }}
                   format="DD/MM/YYYY HH:mm"
                       style={{ width: '100%', height: '40px' }}
-                  dropdownClassName="custom-filter-dropdown"
+                  popupClassName="custom-filter-dropdown"
                   disabledDate={(current) => !!current && current > dayjs()}
                   presets={[
                     { label: 'Últimas 24h', value: [dayjs().subtract(24, 'hour'), dayjs()] },
@@ -2984,7 +3152,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                 speedViolations={speedViolationsChart}
                 tripDuration={tripDurationChart}
                 distanceTrend={distanceTrendChart}
-                driverEvents={driverEventsChart}
+                driverEvents={{
+                  title: '⚠️ Alertas de Condução Contínua',
+                  subtitle: alertsData.hasAlerts ? `${alertsData.totalAlerts} viagem(ns) > 5h30 detectada(s)` : 'Nenhum alerta no período',
+                  data: alertsData.vehicles.map(([vehicle, trips]) => ({
+                    label: vehicle,
+                    segments: [
+                      { 
+                        label: `${trips} viagem(${trips > 1 ? 'ns' : ''})`,
+                        value: trips, 
+                        color: trips >= 3 ? '#ef4444' : trips >= 2 ? '#f97316' : '#facc15' 
+                      },
+                    ],
+                  })),
+                }}
                 fuelDrains={fuelDrainsChart}
               />
             </div>

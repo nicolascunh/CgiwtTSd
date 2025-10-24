@@ -2,6 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Tooltip } from 'antd';
 import { 
   CarOutlined, 
   UserOutlined, 
@@ -9,10 +10,11 @@ import {
   DashboardOutlined,
   LogoutOutlined,
   MenuUnfoldOutlined,
-  MenuFoldOutlined
+  MenuFoldOutlined,
+  SyncOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router';
-import { useLogout } from '@refinedev/core';
+import { useLogout, useGetIdentity } from '@refinedev/core';
 
 interface ShadcnSidebarProps {
   collapsed: boolean;
@@ -42,6 +44,12 @@ const menuItems = [
     path: '/maintenances'
   },
   {
+    key: 'tires',
+    label: 'Controle de Pneus',
+    icon: SyncOutlined,
+    path: '/tires'
+  },
+  {
     key: 'settings',
     label: 'Configurações',
     icon: SettingOutlined,
@@ -57,10 +65,29 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
   onLogout
 }) => {
   const navigate = useNavigate();
+  const { data: identity } = useGetIdentity<{ id: string; name?: string; username?: string; email?: string }>();
 
   const handleNavigation = (path: string, key: string) => {
     navigate(path);
     onTabChange(key);
+  };
+
+  // Obter username do usuário
+  const username = identity?.email || identity?.username || 'usuario@trackmax.com';
+  
+  // Obter iniciais do usuário para o avatar
+  const getUserInitials = () => {
+    if (identity?.name) {
+      const names = identity.name.split(' ');
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[1][0]}`.toUpperCase();
+      }
+      return identity.name.substring(0, 2).toUpperCase();
+    }
+    if (identity?.username) {
+      return identity.username.substring(0, 2).toUpperCase();
+    }
+    return 'U';
   };
 
   return (
@@ -123,22 +150,46 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.key;
+            const isInDevelopment = item.key === 'drivers' || item.key === 'maintenances' || item.key === 'tires';
             
-            return (
+            const button = (
               <Button
                 key={item.key}
                 variant={isActive ? "secondary" : "ghost"}
                 className={cn(
                   "justify-start gap-2",
                   collapsed ? "px-2" : "px-3",
-                  isActive && "bg-secondary font-medium"
+                  isActive && "bg-secondary font-medium",
+                  isInDevelopment && "cursor-not-allowed opacity-70"
                 )}
-                onClick={() => handleNavigation(item.path, item.key)}
+                onClick={() => {
+                  // Não navega se estiver em desenvolvimento
+                  if (!isInDevelopment) {
+                    handleNavigation(item.path, item.key);
+                  }
+                }}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </Button>
             );
+
+            // Wrap com tooltip se estiver em desenvolvimento
+            if (isInDevelopment) {
+              return (
+                <Tooltip 
+                  key={item.key}
+                  title="🚧 Em desenvolvimento" 
+                  placement="right"
+                  mouseEnterDelay={0.3}
+                  arrow
+                >
+                  {button}
+                </Tooltip>
+              );
+            }
+            
+            return button;
           })}
         </nav>
       </div>
@@ -150,7 +201,7 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
           <div className="flex flex-col items-center gap-3">
             <Avatar className="h-8 w-8">
               <AvatarFallback className="bg-primary text-primary-foreground">
-                U
+                {getUserInitials()}
               </AvatarFallback>
             </Avatar>
             
@@ -165,21 +216,18 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
             </Button>
           </div>
         ) : (
-          /* Expanded state - Horizontal layout */
+          /* Expanded state - Centralizado sem card */
           <>
-            <div className="flex items-center gap-2 rounded-lg bg-muted p-2">
+            <div className="flex items-center gap-3 px-2 py-2">
               <Avatar className="h-8 w-8 shrink-0">
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  U
+                  {getUserInitials()}
                 </AvatarFallback>
               </Avatar>
               
-              <div className="flex-1 overflow-hidden min-w-0">
+              <div className="flex-1 overflow-hidden min-w-0 text-center">
                 <p className="text-sm font-medium leading-none truncate">
-                  Usuário Logado
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  usuario@trackmax.com
+                  {username}
                 </p>
               </div>
               
