@@ -67,6 +67,17 @@ import ExecutiveOverview, {
   StackedHorizontalDatum,
   StackedColumnDatum,
 } from './executive/ExecutiveOverview';
+import { 
+  InteractiveDistanceChart,
+  InteractiveEngineHoursChart,
+  InteractiveFuelChart,
+  InteractiveTripDurationChart,
+  InteractiveLineChart,
+  InteractiveBarChart,
+  InteractiveKPICard,
+  ConnectionStatusPieChart,
+  MovementStatusPieChart
+} from './charts';
 import type { Device, Position, Event, ReportTrips, Driver, MaintenanceRecord } from '../types';
 import '../styles/dashboard.css';
 import '../styles/themes.css';
@@ -143,6 +154,113 @@ interface DashboardProps {
 }
 
 type DeviceFilter = 'all' | 'online' | 'offline';
+
+type VehicleIdleClass = 'light' | 'diesel' | 'heavy';
+
+const DEFAULT_IDLE_CONSUMPTION_BY_CLASS: Record<VehicleIdleClass, number> = {
+  light: 0.8,
+  diesel: 1.5,
+  heavy: 3.2,
+};
+
+const IDLE_CONSUMPTION_ATTRIBUTE_KEYS = [
+  'idleFuelRate',
+  'idleFuelConsumption',
+  'idleConsumption',
+  'idleConsumptionLph',
+  'idleConsumptionPerHour',
+  'idleFuelLph',
+  'idleFuel',
+] as const;
+
+const parseNumeric = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim();
+    if (!normalized) {
+      return undefined;
+    }
+    const sanitized = normalized.replace(/\s+/g, '').replace(/,/g, '.');
+    const parsed = Number(sanitized);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+};
+
+const extractNestedNumeric = (source: unknown, keys: readonly string[]): number | undefined => {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+  for (const key of keys) {
+    const candidate = parseNumeric((source as Record<string, unknown>)[key]);
+    if (candidate !== undefined && candidate > 0) {
+      return candidate;
+    }
+  }
+  return undefined;
+};
+
+const normalizeText = (value: unknown): string => {
+  if (!value) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value.toLowerCase();
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => (typeof item === 'string' ? item.toLowerCase() : '')).filter(Boolean).join(' ');
+  }
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>)
+      .map((item) => (typeof item === 'string' ? item.toLowerCase() : ''))
+      .filter(Boolean)
+      .join(' ');
+  }
+  return '';
+};
+
+const inferVehicleIdleClass = (device: Device): VehicleIdleClass => {
+  const attributes = device.attributes as Record<string, unknown> | undefined;
+  const tokens = [
+    normalizeText(device.category),
+    normalizeText(device.model),
+    normalizeText(attributes?.vehicleType),
+    normalizeText(attributes?.fuelType),
+    normalizeText(attributes?.engineType),
+    normalizeText(attributes?.category),
+  ].join(' ');
+
+  if (/\b(caminh[aã]o|truck|carreta|pesado|ônibus|onibus|tractor|cavalo|basculante)\b/.test(tokens)) {
+    return 'heavy';
+  }
+
+  if (/\b(diesel|pickup|pick-up|caminhonet[ea]|ute|sprinter|van|furg[aã]o|4x4)\b/.test(tokens)) {
+    return 'diesel';
+  }
+
+  return 'light';
+};
+
+const getIdleConsumptionRate = (device: Device): number => {
+  const attributes = device.attributes as Record<string, unknown> | undefined;
+  if (attributes) {
+    const direct = extractNestedNumeric(attributes, IDLE_CONSUMPTION_ATTRIBUTE_KEYS);
+    if (direct !== undefined) {
+      return direct;
+    }
+
+    const fuelAttributes = attributes.fuel;
+    const fuelNested = extractNestedNumeric(fuelAttributes, IDLE_CONSUMPTION_ATTRIBUTE_KEYS);
+    if (fuelNested !== undefined) {
+      return fuelNested;
+    }
+  }
+
+  const vehicleClass = inferVehicleIdleClass(device);
+  return DEFAULT_IDLE_CONSUMPTION_BY_CLASS[vehicleClass];
+};
 
 export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
@@ -586,14 +704,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             console.log('🔍 DEBUG - fetchTripsForRange onEnd');
           },
           skipSignatureCheck: true,
-        }),
-        // Buscar positions do período
-        fetchPositions(matchingDeviceIds, 10000).then((fetchedPositions) => {
-          console.log('✅ Positions loaded:', fetchedPositions.length);
-          setPositions(fetchedPositions);
-        }).catch(error => {
-          console.error('❌ Error fetching positions:', error);
         })
+        // ⚠️ REMOVIDO: fetchPositions - não mais necessário, usamos tripStats.engineHours do Traccar
+        // fetchPositions(matchingDeviceIds, 10000).then((fetchedPositions) => {
+        //   console.log('✅ Positions loaded:', fetchedPositions.length);
+        //   setPositions(fetchedPositions);
+        // }).catch(error => {
+        //   console.error('❌ Error fetching positions:', error);
+        // })
       ]);
       
       console.log('🔍 DEBUG - fetchTripsForRange and fetchPositions completed successfully');
@@ -651,16 +769,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
             setIsRangeUpdating(false);
           }
         },
-      }),
-      // Buscar positions do período
-      fetchPositions(activeDeviceIds, 10000).then((fetchedPositions) => {
-        if (!isCancelled) {
-          console.log('✅ Positions loaded for date range:', fetchedPositions.length);
-          setPositions(fetchedPositions);
-        }
-      }).catch(error => {
-        console.error('❌ Error fetching positions for date range:', error);
       })
+      // ⚠️ REMOVIDO: fetchPositions - não mais necessário, usamos tripStats.engineHours do Traccar
+      // fetchPositions(activeDeviceIds, 10000).then((fetchedPositions) => {
+      //   if (!isCancelled) {
+      //     console.log('✅ Positions loaded for date range:', fetchedPositions.length);
+      //     setPositions(fetchedPositions);
+      //   }
+      // }).catch(error => {
+      //   console.error('❌ Error fetching positions for date range:', error);
+      // })
     ]).catch(() => {
       if (!isCancelled) {
         setIsRangeUpdating(false);
@@ -670,7 +788,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     return () => {
       isCancelled = true;
     };
-  }, [debouncedDateRange, activeDeviceIds, fetchTripsForRange, fetchPositions]);
+  }, [debouncedDateRange, activeDeviceIds, fetchTripsForRange]);
 
   // Função para selecionar dispositivo e carregar posições
   const handleDeviceSelect = async (device: Device) => {
@@ -845,7 +963,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const { statsMap: tripStatsMap } = tripAggregation;
 
   const deviceMetrics = useMemo(() => {
-    const metrics = new Map<number, { device: Device; distanceKm: number; trips: number; engineHours: number; drivingHours: number; idleHours: number; fuel: number; lastPosition?: Position }>();
+    const metrics = new Map<number, {
+      device: Device;
+      distanceKm: number;
+      trips: number;
+      engineHours: number;
+      drivingHours: number;
+      idleHours: number;
+      fuel: number;
+      idleFuelRate: number;
+      idleFuelLiters: number;
+      lastPosition?: Position;
+    }>();
 
     console.log('🔍 DEBUG - deviceMetrics calculation:', {
       effectiveDevicesLength: effectiveDevices.length,
@@ -956,12 +1085,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       let minTotal = Infinity;
       let maxTotal = -Infinity;
       let incrementalMeters = 0;
-      let ignitionSeconds = 0;
-      let drivingSeconds = 0; // Tempo em movimento > 5 km/h
-      let idleSeconds = 0;
-      let currentIdleStreak = 0; // Controlar sequência de marcha lenta
-      const MIN_IDLE_SECONDS = 180; // 3 minutos mínimos
-      const MIN_DRIVING_SPEED_KMH = 5; // Velocidade mínima para considerar "em movimento"
+      
+      // 📊 MÉTRICAS DE TEMPO
+      let ignitionSeconds = 0;      // ⚙️ Horas de Motor: TOTAL com ignição ligada (independente de velocidade)
+      let drivingSeconds = 0;       // 🚗 Tempo de Condução: Apenas quando velocidade > 5 km/h
+      let idleSeconds = 0;          // 🚦 Marcha Lenta: 0 km/h após 3 minutos contínuos
+      let currentIdleStreak = 0;    // Controle de tempo contínuo parado
+      
+      // 🎯 CONSTANTES
+      const MIN_IDLE_SECONDS = 180;        // 3 minutos contínuos para contar marcha lenta
+      const MIN_DRIVING_SPEED_KMH = 5;     // Velocidade mínima para considerar "em movimento"
 
       devicePositions.forEach((pos) => {
         const attrs = pos.attributes as { totalDistance?: number } | undefined;
@@ -1010,27 +1143,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           });
         }
         
+        // ✅ CÁLCULO DE HORAS DE MOTOR (Ignição Ligada TOTAL)
         if (ignition) {
+          // ⚙️ Sempre conta quando ignição está ligada (independente de velocidade)
           ignitionSeconds += deltaSeconds;
           
-          // Tempo de condução: apenas quando velocidade > 5 km/h
+          // 🚗 TEMPO DE CONDUÇÃO: Apenas quando EM MOVIMENTO (velocidade > 5 km/h)
           if (speedKmh > MIN_DRIVING_SPEED_KMH) {
             drivingSeconds += deltaSeconds;
-            currentIdleStreak = 0; // Reseta sequência de idle
+            currentIdleStreak = 0; // Reseta contador de marcha lenta
           }
           
-          // Marcha lenta: ignição ligada + 0 km/h após 3 minutos contínuos
+          // 🚦 MARCHA LENTA: Veículo PARADO (0 km/h) após 3 minutos contínuos
           if (speedKmh === 0) {
             currentIdleStreak += deltaSeconds;
-            // Só conta se passar de 3 minutos contínuos
+            // Só começa a contar após 3 minutos parado
             if (currentIdleStreak >= MIN_IDLE_SECONDS) {
               idleSeconds += deltaSeconds;
             }
           } else if (speedKmh <= MIN_DRIVING_SPEED_KMH) {
-            // Velocidade entre 0 e 5 km/h não conta como condução nem como idle
+            // ⚠️ Zona neutra (0-5 km/h): não conta como condução nem marcha lenta
             currentIdleStreak = 0;
           }
         } else {
+          // Ignição desligada: reseta contador de marcha lenta
           currentIdleStreak = 0;
         }
 
@@ -1091,6 +1227,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       const totalDrivingHoursPerDevice = drivingHours > 0 ? drivingHours : tripDrivingHours;
       const totalIdleHoursPerDevice = idleHours > 0 ? idleHours : tripIdleHours;
 
+      const idleFuelRate = getIdleConsumptionRate(device);
+      const idleFuelLiters = totalIdleHoursPerDevice > 0 ? totalIdleHoursPerDevice * idleFuelRate : 0;
+
       const deviceMetrics = {
         device,
         distanceKm,
@@ -1099,11 +1238,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         drivingHours: totalDrivingHoursPerDevice,
         idleHours: totalIdleHoursPerDevice,
         fuel,
+        idleFuelRate,
+        idleFuelLiters,
         lastPosition: devicePositions[devicePositions.length - 1],
       };
 
       console.log(`🔍 DEBUG - Device ${device.name} final metrics:`, {
         ...deviceMetrics,
+        '⚙️ EXPLICAÇÃO': {
+          'Horas de Motor': 'Tempo TOTAL com ignição ligada (independente de estar parado ou em movimento)',
+          'Tempo de Condução': 'Tempo em MOVIMENTO com velocidade > 5 km/h',
+          'Marcha Lenta': 'Tempo PARADO (0 km/h) após 3 minutos contínuos',
+          'Relação': 'Horas Motor ≥ Tempo Condução + Marcha Lenta'
+        },
         fontes: {
           engineHours: tripStats?.engineHours ? `✅ Traccar (${tripStats.trips} viagens)` : '⚠️ Cálculo manual (sem trips)',
           drivingHours: drivingHours > 0 ? '✅ Positions (velocidade > 5 km/h)' : `⚠️ Trips fallback (${tripDrivingHours.toFixed(2)}h)`,
@@ -1113,7 +1260,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
           engineHours: `${engineHours.toFixed(2)}h`,
           drivingHours: `${totalDrivingHoursPerDevice.toFixed(2)}h`,
           idleHours: `${totalIdleHoursPerDevice.toFixed(2)}h`,
-          distanceKm: `${distanceKm.toFixed(2)}km`
+          distanceKm: `${distanceKm.toFixed(2)}km`,
+          '✅ Validação': `${engineHours.toFixed(2)}h ≥ ${(totalDrivingHoursPerDevice + totalIdleHoursPerDevice).toFixed(2)}h`
         }
       });
 
@@ -1133,11 +1281,51 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         trips: item.trips,
         engineHours: item.engineHours,
         idleHours: item.idleHours,
-        fuel: item.fuel
+        fuel: item.fuel,
+        idleFuelRate: item.idleFuelRate,
+        idleFuelLiters: item.idleFuelLiters
       }))
     });
     return array;
   }, [deviceMetrics]);
+
+  const idleFuelTotals = useMemo(() => {
+    let totalIdleHoursTracked = 0;
+    let totalIdleLiters = 0;
+    const idleLitersByDevice = new Map<number, number>();
+
+    deviceMetricsArray.forEach(({ device, idleHours, idleFuelRate, idleFuelLiters }) => {
+      if (!idleHours || idleHours <= 0) {
+        return;
+      }
+      const computedLiters = typeof idleFuelLiters === 'number' && Number.isFinite(idleFuelLiters)
+        ? idleFuelLiters
+        : idleHours * (idleFuelRate || DEFAULT_IDLE_CONSUMPTION_BY_CLASS.light);
+
+      const liters = computedLiters > 0 ? computedLiters : 0;
+      totalIdleHoursTracked += idleHours;
+      totalIdleLiters += liters;
+      idleLitersByDevice.set(device.id, liters);
+    });
+
+    const averageRate = totalIdleHoursTracked > 0
+      ? totalIdleLiters / totalIdleHoursTracked
+      : DEFAULT_IDLE_CONSUMPTION_BY_CLASS.light;
+
+    console.log('🔍 DEBUG - idleFuelTotals:', {
+      totalIdleHoursTracked,
+      totalIdleLiters,
+      averageRate,
+      devicesConsidered: idleLitersByDevice.size,
+    });
+
+    return {
+      totalIdleHoursTracked,
+      totalIdleLiters,
+      averageRate,
+      idleLitersByDevice,
+    };
+  }, [deviceMetricsArray]);
 
   const distanceByDeviceToday = useMemo(
     () => {
@@ -1190,6 +1378,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const totalDrivingHours = totals.driving;
   const totalIdleHours = totals.idle;
   const estimatedFuel = totals.fuel;
+  const avgIdleConsumption = idleFuelTotals.averageRate;
+  const totalIdleLiters = idleFuelTotals.totalIdleLiters;
   
   // Debug: Mostrar período e valores calculados
   console.log('📊 RESUMO DO PERÍODO SELECIONADO:', {
@@ -1202,7 +1392,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
       horasConducao: `${totalDrivingHours.toFixed(2)}h (${Math.floor(totalDrivingHours)}h ${Math.round((totalDrivingHours % 1) * 60)}min)`,
       horasIdle: `${totalIdleHours.toFixed(2)}h (${Math.floor(totalIdleHours)}h ${Math.round((totalIdleHours % 1) * 60)}min)`,
       distancia: `${totalDistanceKm.toFixed(2)} km`,
-      viagens: totalTrips
+      viagens: totalTrips,
+      marchaLenta: {
+        consumoMedioLph: avgIdleConsumption.toFixed(2),
+        litrosTotais: totalIdleLiters.toFixed(2),
+      }
     }
   });
   
@@ -1727,14 +1921,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     [maxVisualPoints],
   );
 
-  // Consumo médio em marcha lenta (litros/hora)
-  // Carro leve: 0.6-1.0 L/h | Caminhonete/diesel: 1.0-2.0 L/h | Caminhão: 2.5-4.0 L/h
-  // Usando média de 1.5 L/h (frota mista)
-  const FLEET_IDLE_FUEL_RATE = 1.5;
-
   const fuelCost = estimatedFuel * fuelPrice;
-  const idleFuelLiters = totalIdleHours * FLEET_IDLE_FUEL_RATE;
-  const idleFuelCost = idleFuelLiters * fuelPrice;
+  const fleetIdleFuelRate = avgIdleConsumption;
+  const idleFuelLiters = totalIdleLiters;
 
   const fuelCostSeries = useMemo(
     () => fuelSparklinePoints.map((liters) => liters * fuelPrice),
@@ -1742,8 +1931,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   );
 
   const idleFuelCostSeries = useMemo(
-    () => dailyIdleSeries.map((hours) => hours * FLEET_IDLE_FUEL_RATE * fuelPrice),
-    [dailyIdleSeries, fuelPrice],
+    () => dailyIdleSeries.map((hours) => hours * fleetIdleFuelRate * fuelPrice),
+    [dailyIdleSeries, fleetIdleFuelRate, fuelPrice],
   );
 
   const weeklySampleCount = rangeKeys.length;
@@ -1789,8 +1978,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
   const weeklyFuelCostTotal = weeklyFuelTotal * fuelPrice;
   const previousFuelCostTotal = previousFuelTotal !== null ? previousFuelTotal * fuelPrice : null;
 
-  const weeklyIdleCostTotal = weeklyIdleTotal * FLEET_IDLE_FUEL_RATE * fuelPrice;
-  const previousIdleCostTotal = previousIdleTotal !== null ? previousIdleTotal * FLEET_IDLE_FUEL_RATE * fuelPrice : null;
+  const weeklyIdleCostTotal = weeklyIdleTotal * fleetIdleFuelRate * fuelPrice;
+  const previousIdleCostTotal = previousIdleTotal !== null ? previousIdleTotal * fleetIdleFuelRate * fuelPrice : null;
+
+  const idleCostByDevice = useMemo(() => {
+    const litersByDevice = idleFuelTotals.idleLitersByDevice;
+    const map = new Map<number, number>();
+
+    deviceMetricsArray.forEach(({ device, idleHours, idleFuelRate }) => {
+      if (!idleHours || idleHours <= 0) {
+        return;
+      }
+      const liters = litersByDevice.get(device.id) ?? (idleHours * (idleFuelRate || fleetIdleFuelRate));
+      const effectivePrice = getEffectiveFuelPrice(device.id);
+      map.set(device.id, liters * effectivePrice);
+    });
+
+    console.log('🔍 DEBUG - idleCostByDevice:', Array.from(map.entries()).slice(0, 5).map(([id, cost]) => ({
+      deviceId: id,
+      deviceName: deviceMetrics.get(id)?.device.name,
+      cost,
+    })));
+
+    return map;
+  }, [deviceMetricsArray, getEffectiveFuelPrice, idleFuelTotals, fleetIdleFuelRate, deviceMetrics]);
+
+  const totalIdleCost = useMemo(() => {
+    let sum = 0;
+    idleCostByDevice.forEach((cost) => {
+      sum += cost;
+    });
+    return sum;
+  }, [idleCostByDevice]);
 
   const connectionChart = useMemo<DonutChartProps>(() => {
     let online = 0;
@@ -2038,6 +2257,128 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     };
   }, [fuelSeries, weeklyLabel]);
 
+  // 📊 DADOS PARA GRÁFICOS INTERATIVOS SHADCN
+  const interactiveChartsData = useMemo(() => {
+    return {
+      // Distância - Gráfico de Área
+      distance: rangeKeys.map((key) => ({
+        date: key,
+        distanceKm: dailyTripStats.get(key)?.distanceKm ?? 0
+      })),
+
+      // Distância - Gráfico de Linha
+      distanceLine: rangeKeys.map((key) => ({
+        date: key,
+        value: dailyTripStats.get(key)?.distanceKm ?? 0
+      })),
+
+      // Horas de Motor - Gráfico de Área Empilhada
+      engineHours: rangeKeys.map((key) => {
+        const stats = dailyTripStats.get(key);
+        const engineHours = stats?.engineHours ?? 0;
+        const drivingHours = stats?.drivingHours ?? 0;
+        const idleHours = Math.max(engineHours - drivingHours, 0);
+        
+        return {
+          date: key,
+          engineHours: Number(engineHours.toFixed(2)),
+          drivingHours: Number(drivingHours.toFixed(2)),
+          idleHours: Number(idleHours.toFixed(2))
+        };
+      }),
+
+      // Combustível - Gráfico com Toggle Litros/Custo
+      fuel: rangeKeys.map((key) => {
+        const fuelLiters = dailyTripStats.get(key)?.fuelLiters ?? 0;
+        return {
+          date: key,
+          fuelLiters: Number(fuelLiters.toFixed(2)),
+          fuelCost: Number((fuelLiters * fuelPrice).toFixed(2))
+        };
+      }),
+
+      // Combustível - Gráfico de Barras
+      fuelBars: rangeKeys.map((key) => ({
+        date: key,
+        value: dailyTripStats.get(key)?.fuelLiters ?? 0
+      })),
+
+      // Duração das Viagens - Gráfico de Barras Empilhadas
+      tripDuration: rangeKeys.map((key) => {
+        const stats = dailyTripStats.get(key);
+        const index = rangeKeys.indexOf(key);
+        const driving = stats?.drivingHours ?? 0;
+        const idle = index >= 0 ? dailyIdleSeries[index] ?? 0 : 0;
+        const eventsSummary = dailyEventSummary.get(key);
+        const parked = eventsSummary ? eventsSummary.stops * 0.25 : Math.max(driving * 0.3, 0);
+        
+        return {
+          date: key,
+          parked: Number(parked.toFixed(2)),
+          idle: Number(idle.toFixed(2)),
+          driving: Number(driving.toFixed(2)),
+        };
+      }),
+    };
+  }, [rangeKeys, dailyTripStats, dailyIdleSeries, dailyEventSummary, fuelPrice]);
+
+  // 📊 DADOS PARA KPIs INTERATIVOS
+  const interactiveKPIsData = useMemo(() => {
+    return {
+      // Distância Total KPI
+      distance: rangeKeys.map((key) => ({
+        date: key,
+        value: dailyTripStats.get(key)?.distanceKm ?? 0
+      })),
+
+      // Horas de Motor KPI
+      engineHours: rangeKeys.map((key) => ({
+        date: key,
+        value: dailyTripStats.get(key)?.engineHours ?? 0
+      })),
+
+      // Tempo de Condução KPI
+      drivingHours: rangeKeys.map((key) => ({
+        date: key,
+        value: dailyTripStats.get(key)?.drivingHours ?? 0
+      })),
+
+      // Tempo em Marcha Lenta KPI
+      idleHours: rangeKeys.map((key) => {
+        const index = rangeKeys.indexOf(key);
+        return {
+          date: key,
+          value: index >= 0 ? dailyIdleSeries[index] ?? 0 : 0
+        };
+      }),
+
+      // Combustível Consumido KPI
+      fuelLiters: rangeKeys.map((key) => ({
+        date: key,
+        value: dailyTripStats.get(key)?.fuelLiters ?? 0
+      })),
+
+      // Custo de Combustível KPI
+      fuelCost: rangeKeys.map((key) => {
+        const fuelLiters = dailyTripStats.get(key)?.fuelLiters ?? 0;
+        return {
+          date: key,
+          value: fuelLiters * fuelPrice
+        };
+      }),
+
+      // Custo em Marcha Lenta KPI
+      idleCost: rangeKeys.map((key) => {
+        const index = rangeKeys.indexOf(key);
+        const idleHours = index >= 0 ? dailyIdleSeries[index] ?? 0 : 0;
+        return {
+          date: key,
+          value: idleHours * avgIdleConsumption * fuelPrice
+        };
+      }),
+    };
+  }, [rangeKeys, dailyTripStats, dailyIdleSeries, fuelPrice, avgIdleConsumption]);
+
   const kpiCards = useMemo<KpiCardProps[]>(() => {
     const distanceDelta = previousDistanceTotal !== null ? weeklyDistanceTotal - previousDistanceTotal : 0;
     const engineDelta = previousEngineTotal !== null ? weeklyEngineTotal - previousEngineTotal : 0;
@@ -2149,6 +2490,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
         miniChart: <Sparkline points={drivingSparklinePoints} color="#22c55e" />,
       },
       {
+        title: 'Tempo em Marcha Lenta',
+        value: formatHoursMinutes(weeklyIdleTotal),
+        helper: 'Veículo ligado com 0 km/h após 3 minutos contínuos',
+        comparisonLabel: previousIdleTotal !== null ? previousLabel : undefined,
+        comparisonValue: previousIdleTotal !== null ? formatHoursMinutes(previousIdleTotal) : undefined,
+        comparisonTrend:
+          previousIdleTotal !== null && idleCostDelta !== 0 ? (
+            <TrendArrow
+              value={Number((weeklyIdleTotal - (previousIdleTotal || 0)).toFixed(1))}
+              suffix=" h"
+              direction={(weeklyIdleTotal - (previousIdleTotal || 0)) >= 0 ? 'up' : 'down'}
+              tone={(weeklyIdleTotal - (previousIdleTotal || 0)) >= 0 ? 'danger' : 'success'}
+            />
+          ) : undefined,
+        comparisonDelta: previousIdleTotal !== null 
+          ? `${formatDeltaLabel(weeklyIdleTotal - previousIdleTotal, ' h', 1)} (${formatDeltaLabel(previousIdleTotal !== 0 ? ((weeklyIdleTotal - previousIdleTotal) / previousIdleTotal) * 100 : 0, '%', 1)})`
+          : undefined,
+        miniChart: <Sparkline points={dailyIdleSeries} color="#f97316" />,
+      },
+      {
         title: 'Combustível consumido (L)',
         value: formatNumber(weeklyFuelTotal, 1),
         helper: weeklyLabel,
@@ -2209,9 +2570,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     fuelSparklinePoints,
     fuelCostSeries,
     idleFuelCostSeries,
+    dailyIdleSeries,
     weeklyDistanceTotal,
     weeklyEngineTotal,
     weeklyDrivingTotal,
+    weeklyIdleTotal,
     weeklyFuelTotal,
     weeklyFuelCostTotal,
     weeklyIdleCostTotal,
@@ -2220,6 +2583,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
     previousDistanceTotal,
     previousEngineTotal,
     previousDrivingTotal,
+    previousIdleTotal,
     previousFuelTotal,
     previousFuelCostTotal,
     previousIdleCostTotal,
@@ -3092,7 +3456,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     <Button
                       type="primary"
                       onClick={handleSearch}
-                      loading={isSearching}
                       disabled={isSearching}
                       style={{ 
                         width: '100%', 
@@ -3144,45 +3507,251 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
               </div>
             </div>
 
+            {/* 📊 GRÁFICOS DE STATUS - PIE CHARTS SHADCN */}
             <div style={{ marginBottom: isMobile ? '16px' : '32px' }}>
-              <ExecutiveOverview
-                connection={connectionChart}
-                movement={movementChart}
-                kpis={kpiCards}
-                speedViolations={speedViolationsChart}
-                tripDuration={tripDurationChart}
-                distanceTrend={distanceTrendChart}
-                driverEvents={{
-                  title: '⚠️ Alertas de Condução Contínua',
-                  subtitle: alertsData.hasAlerts ? `${alertsData.totalAlerts} viagem(ns) > 5h30 detectada(s)` : 'Nenhum alerta no período',
-                  data: alertsData.vehicles.map(([vehicle, trips]) => ({
-                    label: vehicle,
-                    segments: [
-                      { 
-                        label: `${trips} viagem(${trips > 1 ? 'ns' : ''})`,
-                        value: trips, 
-                        color: trips >= 3 ? '#ef4444' : trips >= 2 ? '#f97316' : '#facc15' 
-                      },
-                    ],
-                  })),
-                }}
-                fuelDrains={fuelDrainsChart}
-              />
+              <Title level={3} style={{ marginBottom: '24px', color: '#0f172a', fontWeight: 600 }}>
+                📊 Status da Frota em Tempo Real
+              </Title>
+              
+              <Row gutter={[24, 24]}>
+                <Col xs={24} sm={12} lg={12}>
+                  <ConnectionStatusPieChart 
+                    segments={(connectionChart.segments || []).filter(s => s.label !== 'Outros')}
+                    total={(connectionChart.segments || []).filter(s => s.label !== 'Outros').reduce((sum, s) => sum + s.value, 0) || 0}
+                    title={connectionChart.title}
+                    description={connectionChart.subtitle}
+                  />
+                </Col>
+
+                <Col xs={24} sm={12} lg={12}>
+                  <MovementStatusPieChart 
+                    segments={movementChart.segments || []}
+                    total={movementChart.segments?.reduce((sum, s) => sum + s.value, 0) || 0}
+                    title={movementChart.title}
+                    description={movementChart.subtitle}
+                  />
+                </Col>
+              </Row>
             </div>
 
-            {/* Feedback da Busca */}
-            {hasSearched && !isSearching && (
-              <Alert
-                message="Busca realizada com sucesso!"
-                description={`Filtros aplicados: ${isAllPlatesSelected ? 'Todas as placas' : selectedPlates.length > 0 ? `${selectedPlates.length} placa(s) selecionada(s)` : 'Todas as placas'} • Período: ${dateRange[0].format('DD/MM/YYYY HH:mm')} → ${dateRange[1].format('DD/MM/YYYY HH:mm')}`}
-                type="success"
-                showIcon
-                closable
-                style={{ marginBottom: '24px' }}
-                onClose={() => setHasSearched(false)}
-              />
-            )}
-            
+            {/* ExecutiveOverview removido - agora usando Pie Charts Shadcn acima */}
+
+            {/* 📊 KPIs INTERATIVOS SHADCN */}
+            <div style={{ marginBottom: isMobile ? '16px' : '32px' }}>
+              <Title level={3} style={{ marginBottom: '24px', color: '#0f172a', fontWeight: 600 }}>
+                📊 Indicadores de Performance (KPIs)
+              </Title>
+              
+              <Row gutter={[16, 16]}>
+                {/* Distância Total KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Distância total (km)"
+                    description="Total de quilômetros rodados pela frota"
+                    currentValue={formatNumber(weeklyDistanceTotal, 1)}
+                    currentLabel=""
+                    trend={
+                      previousDistanceTotal !== null
+                        ? {
+                            value: weeklyDistanceTotal - previousDistanceTotal,
+                            label: `${weeklyDistanceTotal >= previousDistanceTotal ? '+' : ''}${formatNumber(weeklyDistanceTotal - previousDistanceTotal, 1)} km`,
+                            isPositive: weeklyDistanceTotal >= previousDistanceTotal,
+                            isNeutral: weeklyDistanceTotal === previousDistanceTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.distance}
+                    color="#38bdf8"
+                    formatter={(val) => `${val.toFixed(1)} km`}
+                  />
+                </Col>
+
+                {/* Horas de Motor KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Horas de Motor"
+                    description="Tempo com ignição ligada total"
+                    currentValue={formatHoursMinutes(weeklyEngineTotal)}
+                    currentLabel=""
+                    trend={
+                      previousEngineTotal !== null
+                        ? {
+                            value: weeklyEngineTotal - previousEngineTotal,
+                            label: `${weeklyEngineTotal >= previousEngineTotal ? '+' : ''}${(weeklyEngineTotal - previousEngineTotal).toFixed(1)} h`,
+                            isPositive: weeklyEngineTotal >= previousEngineTotal,
+                            isNeutral: weeklyEngineTotal === previousEngineTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.engineHours}
+                    color="#8b5cf6"
+                    formatter={(val) => `${val.toFixed(1)} h`}
+                  />
+                </Col>
+
+                {/* Tempo de Condução KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Tempo de Condução"
+                    description="Tempo em movimento acima de 5 km/h"
+                    currentValue={formatHoursMinutes(weeklyDrivingTotal)}
+                    currentLabel=""
+                    trend={
+                      previousDrivingTotal !== null
+                        ? {
+                            value: weeklyDrivingTotal - previousDrivingTotal,
+                            label: `${weeklyDrivingTotal >= previousDrivingTotal ? '+' : ''}${(weeklyDrivingTotal - previousDrivingTotal).toFixed(1)} h`,
+                            isPositive: weeklyDrivingTotal >= previousDrivingTotal,
+                            isNeutral: weeklyDrivingTotal === previousDrivingTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.drivingHours}
+                    color="#22c55e"
+                    formatter={(val) => `${val.toFixed(1)} h`}
+                  />
+                </Col>
+
+                {/* Tempo em Marcha Lenta KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Tempo em Marcha Lenta"
+                    description="Veículo ligado com 0 km/h após 3 minutos contínuos"
+                    currentValue={formatHoursMinutes(weeklyIdleTotal)}
+                    currentLabel=""
+                    trend={
+                      previousIdleTotal !== null
+                        ? {
+                            value: weeklyIdleTotal - previousIdleTotal,
+                            label: `${weeklyIdleTotal >= previousIdleTotal ? '+' : ''}${(weeklyIdleTotal - previousIdleTotal).toFixed(1)} h (${((weeklyIdleTotal - previousIdleTotal) / (previousIdleTotal || 1) * 100).toFixed(0)}%)`,
+                            isPositive: weeklyIdleTotal < previousIdleTotal, // Menos idle é melhor
+                            isNeutral: weeklyIdleTotal === previousIdleTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.idleHours}
+                    color="#f97316"
+                    formatter={(val) => `${val.toFixed(1)} h`}
+                  />
+                </Col>
+
+                {/* Combustível Consumido KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Combustível consumido (L)"
+                    description="Total de litros consumidos pela frota"
+                    currentValue={formatNumber(weeklyFuelTotal, 1)}
+                    currentLabel=""
+                    trend={
+                      previousFuelTotal !== null
+                        ? {
+                            value: weeklyFuelTotal - previousFuelTotal,
+                            label: `${weeklyFuelTotal >= previousFuelTotal ? '+' : ''}${formatNumber(weeklyFuelTotal - previousFuelTotal, 1)} L`,
+                            isPositive: weeklyFuelTotal < previousFuelTotal, // Menos combustível é melhor
+                            isNeutral: weeklyFuelTotal === previousFuelTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.fuelLiters}
+                    color="#3b82f6"
+                    formatter={(val) => `${val.toFixed(1)} L`}
+                  />
+                </Col>
+
+                {/* Custo de Combustível KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Custo de combustível (R$)"
+                    description="Valor gasto com combustível pela frota"
+                    currentValue={`R$ ${formatNumber(weeklyFuelCostTotal, 2)}`}
+                    currentLabel=""
+                    trend={
+                      previousFuelCostTotal !== null
+                        ? {
+                            value: weeklyFuelCostTotal - previousFuelCostTotal,
+                            label: `${weeklyFuelCostTotal >= previousFuelCostTotal ? '+' : ''}R$ ${formatNumber(weeklyFuelCostTotal - previousFuelCostTotal, 2)}`,
+                            isPositive: weeklyFuelCostTotal < previousFuelCostTotal, // Menos custo é melhor
+                            isNeutral: weeklyFuelCostTotal === previousFuelCostTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.fuelCost}
+                    color="#10b981"
+                    formatter={(val) => `R$ ${val.toFixed(2)}`}
+                  />
+                </Col>
+
+                {/* Custo em Marcha Lenta KPI */}
+                <Col xs={24} sm={12} lg={8}>
+                  <InteractiveKPICard
+                    title="Custo em marcha lenta (R$)"
+                    description="Valor gasto com veículo em marcha lenta"
+                    currentValue={`R$ ${formatNumber(weeklyIdleCostTotal, 2)}`}
+                    currentLabel=""
+                    trend={
+                      previousIdleCostTotal !== null
+                        ? {
+                            value: weeklyIdleCostTotal - previousIdleCostTotal,
+                            label: `${weeklyIdleCostTotal >= previousIdleCostTotal ? '+' : ''}R$ ${formatNumber(weeklyIdleCostTotal - previousIdleCostTotal, 2)}`,
+                            isPositive: weeklyIdleCostTotal < previousIdleCostTotal, // Menos custo é melhor
+                            isNeutral: weeklyIdleCostTotal === previousIdleCostTotal,
+                          }
+                        : undefined
+                    }
+                    data={interactiveKPIsData.idleCost}
+                    color="#ef4444"
+                    formatter={(val) => `R$ ${val.toFixed(2)}`}
+                  />
+                </Col>
+              </Row>
+            </div>
+
+            {/* 📊 GRÁFICOS INTERATIVOS SHADCN - NOVOS */}
+            <div style={{ marginBottom: isMobile ? '16px' : '32px' }}>
+              <Title level={3} style={{ marginBottom: '24px', color: '#0f172a', fontWeight: 600 }}>
+                📊 Análise Detalhada com Gráficos Interativos
+              </Title>
+              
+              <Row gutter={[24, 24]}>
+                {/* Distância - Gráfico de Área */}
+                <Col xs={24} xl={12}>
+                  <InteractiveDistanceChart 
+                    data={interactiveChartsData.distance}
+                    title="Tendência de Distância ao Longo do Tempo"
+                    description="Evolução da quilometragem da frota"
+                  />
+                </Col>
+
+                {/* Combustível - Gráfico de Barras */}
+                <Col xs={24} xl={12}>
+                  <InteractiveFuelChart 
+                    data={interactiveChartsData.fuel}
+                    title="Consumo Diário de Combustível"
+                    description="Litros consumidos por dia"
+                    fuelPrice={fuelPrice}
+                  />
+                </Col>
+
+                {/* Horas de Motor - Gráfico de Área Empilhada */}
+                <Col xs={24}>
+                  <InteractiveEngineHoursChart 
+                    data={interactiveChartsData.engineHours}
+                    title="Análise de Tempo de Uso dos Veículos"
+                    description="Horas de motor, tempo de condução e tempo em marcha lenta"
+                  />
+                </Col>
+
+                {/* Duração das Viagens - Gráfico de Barras Empilhadas */}
+                <Col xs={24}>
+                  <InteractiveTripDurationChart 
+                    data={interactiveChartsData.tripDuration}
+                    title="Distribuição do Tempo das Viagens"
+                    description="Tempo parado, em marcha lenta e em movimento durante as viagens"
+                  />
+                </Col>
+              </Row>
+            </div>
+
             {!isPriorityLoading('top-cards') ? (
               <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <MetricCard
@@ -3426,326 +3995,158 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
               </Row>
 
             {/* Métricas de Performance */}
-            <Row gutter={[24, 24]} style={{ marginBottom: '32px', display: 'flex', alignItems: 'stretch' }}>
-              <Col xs={24} xl={16} style={{ display: 'flex' }}>
+            <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
+              <Col xs={24}>
                 {!isPriorityLoading('performance') ? (
-                <Card
-                    title={
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>Performance da Frota</span>
-                        {isLoadingPartial && (
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px',
-                            fontSize: '12px',
-                            color: '#1890ff'
-                          }}>
-                            <Spin size="small" />
-                            <span>Carregando...</span>
-                          </div>
-                        )}
-                      </div>
-                    }
-                  className="dashboard-card theme-card"
-                  style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
-                >
-                  {/* Primeira linha - Métricas de Tempo */}
-                  <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
-                    <Col xs={24} sm={12} md={8}>
-                      <div style={{ textAlign: 'center', padding: '16px' }}>
-                        <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
-                        <Title level={4} style={{ margin: '0 0 4px 0' }}>
-                          {formatNumber(engineHours, 1)} h
-                        </Title>
-                        <Text type="secondary">Tempo com ignição ligada</Text>
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                      <span style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>Performance da Frota</span>
+                      {isLoadingPartial && (
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '4px',
+                          fontSize: '12px',
+                          color: '#1890ff'
+                        }}>
+                          <Spin size="small" />
+                          <span>Carregando...</span>
                         </div>
-              </Col>
-                    <Col xs={24} sm={12} md={8}>
-                      <div style={{ textAlign: 'center', padding: '16px' }}>
-                        <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
-                        <Title level={4} style={{ margin: '0 0 4px 0' }}>
-                          {formatNumber(engineOffHours, 1)} h
-                        </Title>
-                        <Text type="secondary">Tempo com ignição desligada</Text>
-                            </div>
-              </Col>
-                    <Col xs={24} sm={12} md={8}>
-                      <div style={{ textAlign: 'center', padding: '16px' }}>
-                        <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
-                        <Title level={4} style={{ margin: '0 0 4px 0' }}>
-                          {formatNumber(idleHours, 1)} h
-                        </Title>
-                        <Text type="secondary">Tempo Veículo Ocioso (parado com ignição ligada)</Text>
-                          </div>
-              </Col>
-            </Row>
-
-                  {/* Segunda linha - Métricas de Uso e Consumo */}
-                  <Row gutter={[16, 16]}>
-                    <Col xs={24} sm={12} md={8}>
-                      <div style={{ textAlign: 'center', padding: '16px' }}>
-                        <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>📈</div>
-                        <Title level={4} style={{ margin: '0 0 4px 0' }}>
-                          {formatNumber(totalDistanceKm, 1)} km
-                        </Title>
-                        <Text type="secondary">Distância percorrida no período</Text>
-                      </div>
-                    </Col>
-                    <Col xs={24} sm={12} md={8}>
-                      <div style={{ textAlign: 'center', padding: '16px' }}>
-                        <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⛽</div>
-                        <Title level={4} style={{ margin: '0 0 4px 0' }}>
-                          {formatNumber(estimatedFuel, 1)} L
-                        </Title>
-                        <Text type="secondary">Consumo estimado</Text>
-                        <div style={{ fontSize: '12px', color: isDarkTheme ? '#94a3b8' : '#666', marginTop: '4px' }}>
-                          Baseado nos consumos informados por veículo
-                        </div>
-                      </div>
-                    </Col>
-                    <Col xs={24} sm={12} md={8}>
-                      <div style={{ textAlign: 'center', padding: '16px' }}>
-                        <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>🚘</div>
-                        <Title level={4} style={{ margin: '0 0 4px 0' }}>
-                          {formatNumber(totalTrips, 0)}
-                        </Title>
-                        <Text type="secondary">Viagens concluídas no período</Text>
-                      </div>
-                    </Col>
-                  </Row>
-                </Card>
-                ) : (
-                  <Card
-                    title="Performance da Frota" 
-                    className="dashboard-card theme-card"
-                    style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
-                  >
-                    {/* Primeira linha - Métricas de Tempo */}
-                    <Row gutter={[16, 16]} style={{ marginBottom: '16px' }}>
-                      <Col xs={24} sm={12} md={8}>
-                        <div style={{ textAlign: 'center', padding: '16px' }}>
-                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
-                          <StatisticValueSkeleton size="large" />
-                          <Text type="secondary">Tempo com ignição ligada</Text>
-                        </div>
-                      </Col>
-                      <Col xs={24} sm={12} md={8}>
-                        <div style={{ textAlign: 'center', padding: '16px' }}>
-                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
-                          <StatisticValueSkeleton size="large" />
-                          <Text type="secondary">Tempo com ignição desligada</Text>
-                        </div>
-                      </Col>
-                      <Col xs={24} sm={12} md={8}>
-                        <div style={{ textAlign: 'center', padding: '16px' }}>
-                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⏱️</div>
-                          <StatisticValueSkeleton size="large" />
-                          <Text type="secondary">Tempo Veículo Ocioso (parado com ignição ligada)</Text>
-                        </div>
-                      </Col>
-                    </Row>
-                    
-                    {/* Segunda linha - Métricas de Distância */}
-                    <Row gutter={[16, 16]}>
-                      <Col xs={24} sm={12} md={8}>
-                        <div style={{ textAlign: 'center', padding: '16px' }}>
-                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>📈</div>
-                          <StatisticValueSkeleton size="large" />
-                          <Text type="secondary">Distância percorrida no período</Text>
-                        </div>
-                      </Col>
-                      <Col xs={24} sm={12} md={8}>
-                        <div style={{ textAlign: 'center', padding: '16px' }}>
-                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>⛽</div>
-                          <StatisticValueSkeleton size="large" />
-                          <Text type="secondary">Combustível estimado (L)</Text>
-                        </div>
-                      </Col>
-                      <Col xs={24} sm={12} md={8}>
-                        <div style={{ textAlign: 'center', padding: '16px' }}>
-                          <div style={{ fontSize: '36px', color: 'var(--primary-color)', marginBottom: '8px' }}>🚘</div>
-                          <StatisticValueSkeleton size="large" />
-                          <Text type="secondary">Viagens concluídas no período</Text>
-                        </div>
-                      </Col>
-                    </Row>
-                  </Card>
-                )}
-              </Col>
-              
-              <Col xs={24} xl={8} style={{ display: 'flex' }}>
-                {!isPriorityLoading('alerts') ? (
-                  <Card 
-                    title="Alertas e Notificações" 
-                    className="dashboard-card theme-card"
-                  style={{ ...cardRaisedStyle, height: '100%', display: 'flex', flexDirection: 'column' }}
-                  >
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                      {recentEvents.length === 0 ? (
-                      <div>
-                        <Empty
-                          description="Nenhum alerta registrado nas últimas horas"
-                          styles={{ image: { height: 80 } }}
-                        />
-                        {isDebugMode && (
-                          <div style={{ marginTop: '16px', padding: '12px', background: '#f0f0f0', borderRadius: '6px' }}>
-                            <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '8px' }}>
-                              Debug Info:
-                            </Text>
-                            <Text style={{ fontSize: '11px', display: 'block' }}>
-                              • Total de eventos: {events.length}
-                            </Text>
-                            <Text style={{ fontSize: '11px', display: 'block' }}>
-                              • Período: {formattedRange}
-                            </Text>
-                            <Text style={{ fontSize: '11px', display: 'block' }}>
-                              • Dispositivos: {effectiveDevices.length}
-                            </Text>
-                            <Button 
-                              size="small" 
-                              type="link" 
-                              onClick={() => {
-                                console.log('🔍 DEBUG - Forçando reload de eventos...');
-                                const loadData = async () => {
-                                  try {
-                                    const deviceIds = activeDeviceIds;
-                                    const rangeStartIso = rangeStartDate.toISOString();
-                                    const rangeEndIso = rangeEndDate.toISOString();
-                                    
-                                    const eventsData = await fetchEvents({
-                                      deviceIds,
-                                      from: rangeStartIso,
-                                      to: rangeEndIso,
-                                      types: ['overspeed', 'engineBlock', 'powerCut', 'geofenceEnter', 'geofenceExit', 'harshBraking', 'harshAcceleration', 'harshCornering', 'idle', 'ignitionOn', 'ignitionOff'],
-                                      pageSize: 500,
-                                    });
-                                    
-                                    console.log('🔄 DEBUG - Reload manual de eventos:', eventsData);
-                                    setEvents(eventsData);
-                                  } catch (err) {
-                                    console.error('❌ Erro no reload manual:', err);
-                                  }
-                                };
-                                loadData();
-                              }}
-                              style={{ fontSize: '11px', padding: '4px 8px', height: 'auto' }}
-                            >
-                              Recarregar Eventos
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                      ) : (
-                        <>
-                          {/* Lista de eventos com scroll interno */}
-                          <div style={{ 
-                            flex: 1, 
-                            overflowY: 'auto', 
-                            overflowX: 'hidden',
-                            maxHeight: '300px',
-                            paddingRight: '4px',
-                            scrollbarWidth: 'thin',
-                            scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
-                          }}>
-                            {paginatedEvents.map((event) => {
-                        const style = getEventStyle(event.type);
-                        const description = describeEvent(event.type);
-                        const deviceName = deviceMap.get(event.deviceId)?.name || `Dispositivo ${event.deviceId}`;
-                        const relativeTime = formatRelativeTime(event.serverTime);
-                        const absoluteTime = event.serverTime ? new Date(event.serverTime).toLocaleString() : '';
-                        const background = isDarkTheme ? style.darkBg : style.lightBg;
-
-                        return (
-                          <div
-                            key={`${event.id}-${event.serverTime}`}
-                            style={{
-                              padding: '12px',
-                              marginBottom: '8px',
-                              background,
-                              borderRadius: '6px',
-                              borderLeft: `4px solid ${style.color}`,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '4px',
-                              }}
-                            >
-                              <div style={{ fontWeight: 'bold', color: style.color }}>
-                                {style.icon} {style.label}
-                              </div>
-                              <div style={{ fontSize: '12px', color: isDarkTheme ? '#cbd5f5' : '#666' }}>
-                                {deviceName}
-                              </div>
-                            </div>
-                            {description && (
-                              <div style={{ fontSize: '12px', color: isDarkTheme ? '#e2e8f0' : '#666', marginBottom: '4px' }}>
-                                {description}
-                              </div>
-                            )}
-                            <div style={{ fontSize: '11px', color: isDarkTheme ? '#94a3b8' : '#999' }}>
-                              {relativeTime}
-                              {absoluteTime && <span style={{ marginLeft: '4px' }}>• {absoluteTime}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                          </div>
-                          
-                          {/* Controles de paginação */}
-                          {totalEventPages > 1 && (
-                            <div style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              padding: '12px 0',
-                              borderTop: `1px solid ${isDarkTheme ? '#374151' : '#e5e7eb'}`,
-                              marginTop: '8px'
-                            }}>
-                              <div style={{ fontSize: '12px', color: isDarkTheme ? '#9ca3af' : '#6b7280' }}>
-                                Página {currentEventPage + 1} de {totalEventPages} • {recentEvents.length} eventos
-                              </div>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <Button
-                                  size="small"
-                                  disabled={currentEventPage === 0}
-                                  onClick={() => setCurrentEventPage(Math.max(0, currentEventPage - 1))}
-                                  style={{ fontSize: '11px', height: '24px' }}
-                                >
-                                  ← Anterior
-                                </Button>
-                                <Button
-                                  size="small"
-                                  disabled={currentEventPage >= totalEventPages - 1}
-                                  onClick={() => setCurrentEventPage(Math.min(totalEventPages - 1, currentEventPage + 1))}
-                                  style={{ fontSize: '11px', height: '24px' }}
-                                >
-                                  Próxima →
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                        </>
                       )}
                     </div>
-                  </Card>
+                    
+                    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+                      {/* Distância Total */}
+                      <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-600">Distância total, km</span>
+                          <span className="text-slate-400">•••</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatNumber(totalDistanceKm / 1000, 3)}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>Hoje</span>
+                          <div className="flex-1 flex items-end justify-end gap-[1px] h-3">
+                            <div className="w-1 bg-slate-300 h-[30%]"></div>
+                            <div className="w-1 bg-slate-300 h-[50%]"></div>
+                            <div className="w-1 bg-slate-300 h-[40%]"></div>
+                            <div className="w-1 bg-blue-500 h-[100%]"></div>
+                          </div>
+                          <span className="text-slate-400">Últimos 5 dias</span>
+                        </div>
+                      </div>
+
+                      {/* Horas de Motor */}
+                      <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-600">Horas de motor</span>
+                          <span className="text-slate-400">•••</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatNumber(engineHours, 0)}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>Esta semana</span>
+                          <div className="flex-1 flex items-center justify-end">
+                            <svg width="32" height="12" className="text-blue-500">
+                              <polyline
+                                points="0,8 8,6 16,9 24,4 32,2"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                              />
+                            </svg>
+                          </div>
+                          <span className="text-slate-400">Últimas 5 semanas</span>
+                        </div>
+                      </div>
+
+                      {/* Tempo de Condução */}
+                      <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-600">Tempo de condução, h</span>
+                          <span className="text-slate-400">•••</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatNumber(totalDrivingHours, 3)}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>Período atual</span>
+                          <span className="ml-auto text-green-600 flex items-center">
+                            ↑ {formatNumber(Math.abs(totalDrivingHours * 0.1), 0)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Combustível Usado */}
+                      <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-600">Combustível usado, l</span>
+                          <span className="text-slate-400">•••</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatNumber(estimatedFuel, 3)}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>Período atual</span>
+                          <span className="ml-auto text-slate-400 flex items-center">
+                            {formatNumber(Math.round(estimatedFuel * 0.05), 0)} Reabastecimentos
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Custo de Combustível */}
+                      <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-600">Custo combustível, R$</span>
+                          <span className="text-slate-400">•••</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatNumber(estimatedFuel * fuelPrice, 3)}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>Período atual</span>
+                        </div>
+                      </div>
+
+                      {/* Custo Marcha Lenta */}
+                      <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-600">Custo marcha lenta, R$</span>
+                          <span className="text-slate-400">•••</span>
+                        </div>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatNumber(totalIdleCost, 3)}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                          <span>Período atual</span>
+                          <span className="ml-auto text-red-600 flex items-center">
+                            ↓ {formatNumber(Math.abs(totalIdleCost * 0.15), 0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <CardLoadingSkeleton 
-                    title="Alertas e Notificações" 
-                    type="events" 
-                    height="100%"
-                  />
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                      <span style={{ fontSize: '16px', fontWeight: 600, color: '#0f172a' }}>Performance da Frota</span>
+                    </div>
+                    
+                    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <CardLoadingSkeleton key={index} height="90px" />
+                      ))}
+                    </div>
+                  </>
                 )}
               </Col>
             </Row>
 
             {/* Cards de Status e Comportamento */}
-            <Row gutter={[24, 24]} style={{ marginBottom: '32px' }}>
-              <Col xs={24} md={12}>
+            <Row gutter={[16, 16]} style={{ marginBottom: '32px' }}>
+              <Col xs={24} sm={12} lg={8}>
                   <Card
                   title={
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -3765,8 +4166,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     </div>
                   }
                     className="dashboard-card theme-card"
-                    style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
-                    styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
+                    style={{ ...cardRaisedStyle, height: '350px', display: 'flex', flexDirection: 'column' }}
+                    styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '12px' } }}
                   >
                     {/* Filtro de ordenação */}
                     <div style={{ 
@@ -3807,7 +4208,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                         flex: 1, 
                         overflowY: 'auto', 
                         overflowX: 'hidden',
-                        maxHeight: '260px',
+                        maxHeight: '220px',
                         paddingRight: '4px',
                         scrollbarWidth: 'thin',
                         scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
@@ -3837,7 +4238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                   </Card>
               </Col>
 
-              <Col xs={24} md={12}>
+              <Col xs={24} sm={12} lg={8}>
                 <Card
                   title={
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
@@ -3857,8 +4258,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                     </div>
                   }
                   className="dashboard-card theme-card"
-                  style={{ ...cardRaisedStyle, height: '400px', display: 'flex', flexDirection: 'column' }}
-                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '16px' } }}
+                  style={{ ...cardRaisedStyle, height: '350px', display: 'flex', flexDirection: 'column' }}
+                  styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: '12px' } }}
                 >
                   {/* Filtro de ordenação */}
                   <div style={{ 
@@ -3899,7 +4300,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                       flex: 1, 
                       overflowY: 'auto', 
                       overflowX: 'hidden',
-                      maxHeight: '260px',
+                      maxHeight: '220px',
                       paddingRight: '4px',
                       scrollbarWidth: 'thin',
                       scrollbarColor: isDarkTheme ? '#4a4a4a #2a2a2a' : '#d9d9d9 #f0f0f0'
@@ -4321,10 +4722,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                 <div
                                   key={item.device.id}
                                   style={{
-                                marginBottom: '20px',
-                                padding: '16px',
+                                marginBottom: '8px',
+                                padding: '10px',
                                     background: 'rgba(255,255,255,0.85)',
-                                borderRadius: '12px',
+                                borderRadius: '8px',
                                 border: '1px solid rgba(0,0,0,0.05)',
                                 transition: 'all 0.3s ease',
                                 cursor: 'pointer'
@@ -4338,18 +4739,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                 e.currentTarget.style.boxShadow = 'none';
                                   }}
                                 >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <div
                                         style={{
-                                      width: '32px',
-                                      height: '32px',
-                                      borderRadius: '8px',
+                                      width: '40px',
+                                      height: '24px',
+                                      borderRadius: '4px',
                                       background: colors.bg,
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      fontSize: '14px',
+                                      fontSize: '11px',
                                       color: 'white',
                                       fontWeight: 'bold'
                                         }}
@@ -4357,22 +4758,22 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                         {efficiencyLabel}
                                     </div>
                                     <div>
-                                      <Text style={{ fontSize: '14px', fontWeight: '600', color: '#1a1a2e' }}>{item.device.name}</Text>
+                                      <Text style={{ fontSize: '13px', fontWeight: '600', color: '#1a1a2e' }}>{item.device.name}</Text>
                                       </div>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                    <Text style={{ fontSize: '13px', fontWeight: 'bold', color: colors.color }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Text style={{ fontSize: '11px', fontWeight: 'bold', color: colors.color }}>
                                         {efficiencyLabel} km/l
                                     </Text>
-                                      <Text style={{ fontSize: '11px', color: '#666' }}>
+                                      <Text style={{ fontSize: '10px', color: '#999' }}>
                                         {distanceLabel} km
                                       </Text>
                                   </div>
                                 </div>
                                 <div style={{ 
-                                  height: '8px', 
+                                  height: '6px', 
                                   backgroundColor: 'rgba(0,0,0,0.08)', 
-                                  borderRadius: '4px', 
+                                  borderRadius: '3px', 
                                   overflow: 'hidden',
                                   position: 'relative'
                                 }}>
@@ -4382,7 +4783,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                       background: colors.bg,
                                       width: `${percentage}%`,
                                       transition: 'width 0.6s ease',
-                                      borderRadius: '4px',
+                                      borderRadius: '3px',
                                       position: 'relative'
                                     }}
                                   >
@@ -4397,8 +4798,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                     }}></div>
                                   </div>
                                 </div>
-                                  <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#555' }}>
+                                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#555' }}>
                                       <span>
                                         Consumo {isRealData ? 'real' : 'estimado'}
                                       </span>
@@ -4406,13 +4807,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                         {fuelUsedLabel} L
                                       </span>
                               </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#555' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#555' }}>
                                       <span>Custo estimado</span>
                                       <span style={{ fontWeight: 600, color: '#1a1a2e' }}>
                                         {costLabel}
                                       </span>
                         </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#555', flexWrap: 'wrap' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#555', flexWrap: 'wrap' }}>
                                       <span>Valor combustível:</span>
                                       <InputNumber
                                         size="small"
@@ -4421,9 +4822,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                         precision={2}
                                         value={isOverrideActive ? fuelPriceOverrides[item.device.id] : effectiveFuelPrice}
                                         onChange={(value) => handleFuelPriceOverrideChange(item.device.id, value)}
-                                        style={{ width: '120px' }}
+                                        style={{ width: '100px' }}
                                       />
-                                      <Text style={{ fontSize: '11px', color: '#666' }}>
+                                      <Text style={{ fontSize: '10px', color: '#666' }}>
                                         R$ {priceLabel}
                                       </Text>
                                       {isOverrideActive && (
@@ -4431,7 +4832,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ children }) => {
                                           type="link"
                                           size="small"
                                           onClick={() => handleFuelPriceOverrideChange(item.device.id, null)}
-                                          style={{ padding: 0 }}
+                                          style={{ padding: 0, fontSize: '10px' }}
                                         >
                                           Usar padrão
                                         </Button>

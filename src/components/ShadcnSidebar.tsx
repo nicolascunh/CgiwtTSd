@@ -72,8 +72,9 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
     onTabChange(key);
   };
 
-  // Obter username do usuário
-  const username = identity?.email || identity?.username || 'usuario@trackmax.com';
+  // Obter nome e email do usuário
+  const username = identity?.name || identity?.username || 'Usuário';
+  const userEmail = identity?.email || identity?.username || 'usuario@trackmax.com';
   
   // Obter iniciais do usuário para o avatar
   const getUserInitials = () => {
@@ -99,8 +100,8 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
     >
       {/* Header */}
       <div className={cn(
-        "flex h-16 items-center border-b px-4",
-        collapsed ? "flex-col justify-center gap-2" : "justify-between"
+        "flex items-center border-b px-3",
+        collapsed ? "h-20 flex-col justify-center gap-1" : "h-24 justify-between"
       )}>
         {collapsed ? (
           /* Collapsed state - Stack vertically and center */
@@ -108,13 +109,13 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
             <img 
               src="/image.png" 
               alt="TrackMAX"
-              className="h-8 w-8 rounded-lg"
+              className="h-12 w-14 rounded-lg object-contain"
             />
             <Button
               variant="ghost"
               size="icon"
               onClick={onToggleCollapse}
-              className="h-6 w-6 p-0"
+              className="h-5 w-5 p-0"
             >
               <MenuUnfoldOutlined className="h-3 w-3" />
             </Button>
@@ -122,13 +123,12 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
         ) : (
           /* Expanded state - Horizontal layout */
           <>
-            <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <img 
                 src="/image.png" 
                 alt="TrackMAX"
-                className="h-8 w-8 rounded-lg shrink-0"
+                className="h-20 w-28 rounded-xl shrink-0 object-contain"
               />
-              <span className="font-semibold truncate">TrackMAX</span>
             </div>
             
             {/* Toggle Button */}
@@ -216,18 +216,21 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
             </Button>
           </div>
         ) : (
-          /* Expanded state - Centralizado sem card */
+          /* Expanded state - Avatar e nome alinhados */
           <>
             <div className="flex items-center gap-3 px-2 py-2">
-              <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback className="bg-primary text-primary-foreground">
+              <Avatar className="h-10 w-10 shrink-0">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                   {getUserInitials()}
                 </AvatarFallback>
               </Avatar>
               
-              <div className="flex-1 overflow-hidden min-w-0 text-center">
+              <div className="flex-1 overflow-hidden min-w-0">
                 <p className="text-sm font-medium leading-none truncate">
                   {username}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">
+                  {userEmail}
                 </p>
               </div>
               
@@ -236,6 +239,7 @@ export const ShadcnSidebar: React.FC<ShadcnSidebarProps> = ({
                 size="sm"
                 onClick={onLogout}
                 className="h-8 w-8 p-0 shrink-0 text-destructive hover:text-destructive"
+                title="Sair"
               >
                 <LogoutOutlined className="h-4 w-4" />
               </Button>

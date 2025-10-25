@@ -328,9 +328,14 @@ export const useTrackmaxApi = () => {
     processor: (item: T) => Promise<any>
   ): Promise<any[]> => {
     const results: any[] = [];
+    const totalBatches = Math.ceil(items.length / batchSize);
     
     for (let i = 0; i < items.length; i += batchSize) {
       const batch = items.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      
+      console.log(`🔄 Processando lote ${batchNum}/${totalBatches} com ${batch.length} itens...`);
+      
       const batchPromises = batch.map(processor);
       const batchResults = await Promise.allSettled(batchPromises);
       
@@ -340,8 +345,16 @@ export const useTrackmaxApi = () => {
           results.push(result.value);
         }
       });
+      
+      // ⚠️ IMPORTANTE: Delay entre batches para evitar sobrecarga
+      if (i + batchSize < items.length) {
+        const delay = 500; // 500ms entre batches
+        console.log(`⏳ Aguardando ${delay}ms antes do próximo lote...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
     
+    console.log(`✅ Processamento completo: ${results.length} resultados de ${items.length} itens`);
     return results;
   };
 
@@ -353,7 +366,7 @@ export const useTrackmaxApi = () => {
       }
 
       const url = `${getApiUrlSync()}/reports/trips`;
-      const CONCURRENT_REQUESTS = 5; // Limite de concorrência
+      const CONCURRENT_REQUESTS = 2; // ⚠️ REDUZIDO: Limite de concorrência para evitar ERR_INSUFFICIENT_RESOURCES
       
       console.log(`🛣️ Buscando viagens para ${deviceIds.length} dispositivos com concorrência de ${CONCURRENT_REQUESTS}`);
 
